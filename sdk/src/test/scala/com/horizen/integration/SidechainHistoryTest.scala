@@ -7,9 +7,9 @@ import com.horizen.block.SidechainBlock
 import com.horizen.chain.SidechainBlockInfo
 import com.horizen.companion.SidechainTransactionsCompanion
 import com.horizen.customtypes.SemanticallyInvalidTransactionSerializer
-import com.horizen.fixtures.{IODBStoreFixture, SidechainBlockFixture, SidechainBlockInfoFixture}
+import com.horizen.fixtures.{IODBStoreFixture, SidechainBlockFixture, SidechainBlockInfoFixture, TransactionFixture}
 import com.horizen.params.{MainNetParams, NetworkParams}
-import com.horizen.storage.{IODBStoreAdapter, SidechainHistoryStorage, Storage}
+import com.horizen.storage.{IODBStoreAdapter, SidechainBlocks, Storage, TransactionIndexes}
 import com.horizen.transaction.TransactionSerializer
 import com.horizen.utils.WithdrawalEpochInfo
 import com.horizen.validation.SidechainBlockSemanticValidator
@@ -22,13 +22,13 @@ import org.scalatest.mockito.MockitoSugar
 import scorex.core.consensus.History.ProgressInfo
 import scorex.core.consensus.{History, ModifierSemanticValidity}
 import scorex.core.settings.ScorexSettings
-import scorex.util.ModifierId
 
 import scala.util.{Failure, Success}
 
 class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     with SidechainBlockFixture with SidechainBlockInfoFixture
-    with IODBStoreFixture with scorex.core.utils.ScorexEncoding {
+    with IODBStoreFixture with scorex.core.utils.ScorexEncoding
+    with TransactionFixture {
 
   var customTransactionSerializers: JHashMap[JByte, TransactionSerializer[SidechainTypes#SCBT]] = new JHashMap()
   customTransactionSerializers.put(11.toByte, SemanticallyInvalidTransactionSerializer.getSerializer.asInstanceOf[TransactionSerializer[SidechainTypes#SCBT]])
@@ -61,9 +61,17 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
   @Test
   def genesisTest(): Unit = {
-    val sidechainHistoryStorage = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
-    val historyTry = SidechainHistory.genesisHistory(sidechainHistoryStorage, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val transactionIndexesStorage = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
+    val historyTry = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage,
+      transactionIndexesStorage,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history creation expected to be successful. ", historyTry.isSuccess)
 
     val history = historyTry.get
@@ -77,16 +85,30 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
   @Test
   def appendTest(): Unit = {
-    val sidechainHistoryStorage = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
-    val historyTry = SidechainHistory.genesisHistory(sidechainHistoryStorage, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val transactionIndexesStorage = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
+    val historyTry = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage,
+      transactionIndexesStorage,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history creation expected to be successful. ", historyTry.isSuccess)
 
     var history: SidechainHistory = historyTry.get
     var progressInfo: ProgressInfo[SidechainBlock] = null
 
     // Test 1: append block after genesis
-    val blockB2: SidechainBlock = generateNextSidechainBlock(genesisBlock, sidechainTransactionsCompanion, params, basicSeed = 111L)
+    val transactionsForB2 = generateRegularTransactionsList(2, 111)
+    val blockB2: SidechainBlock = generateNextSidechainBlock(
+      genesisBlock,
+      sidechainTransactionsCompanion,
+      params,
+      basicSeed = 111L,
+      transactionsForB2)
     history.append(blockB2) match {
       case Success((hist, prog)) =>
         history = hist
@@ -108,10 +130,25 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     assertEquals("Expected to have different best block, best block was changed.", blockB2.id , history.bestBlockId)
     assertEquals("Expected to have different best block info, best block was changed.",
       SidechainBlockInfo(2, (1L << 32) + 2, blockB2.parentId, ModifierSemanticValidity.Valid, Seq(), WithdrawalEpochInfo(1, 1)), history.bestBlockInfo)
+    assertTrue(history.getBlockById(blockB2.id).isPresent)
+
+    transactionsForB2.foreach{ transaction =>
+      val transactionInBlockChain = history.searchTransactionInsideBlockchain(transaction.id).get
+      assertEquals("transactions shall be found in blockchain", transaction.id, transactionInBlockChain.id)
+    }
+
+    assertEquals("transactions shall be found in block",
+      transactionsForB2.head.id, history.searchTransactionInsideSidechainBlock(transactionsForB2.head.id, blockB2.id).get().id)
 
 
     // Test 2: append block after current tip (not after genesis)
-    val blockB3: SidechainBlock = generateNextSidechainBlock(blockB2, sidechainTransactionsCompanion, params, basicSeed = 112L)
+    val transactionsForB3 = generateRegularTransactionsList(3, 112)
+    val blockB3: SidechainBlock = generateNextSidechainBlock(
+      blockB2,
+      sidechainTransactionsCompanion,
+      params,
+      basicSeed = 112L,
+      transactionsForB3)
     history.append(blockB3) match {
       case Success((hist, prog)) =>
         history = hist
@@ -133,6 +170,10 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     assertEquals("Expected to have different best block info, best block was changed.",
       SidechainBlockInfo(3, (1L << 32) + 3, blockB3.parentId, ModifierSemanticValidity.Valid, Seq(), WithdrawalEpochInfo(1, 1)), history.bestBlockInfo)
 
+    transactionsForB3.foreach{ transaction =>
+      val transactionInBlockChain = history.searchTransactionInsideBlockchain(transaction.id).get
+      assertEquals("transactions shall be found in blockchain", transaction.id, transactionInBlockChain.id)
+    }
 
     // At the moment we have an active chain G1 -> B2 -> B3,
     // where G1 - genesis with height 1,
@@ -166,9 +207,16 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     assertFalse("Block expected to be NOT present.", history.contains(invalidBlock.id))
 
 
-    // Test 5: try to add block b2
-    val forkBlockb2: SidechainBlock = generateNextSidechainBlock(genesisBlock, sidechainTransactionsCompanion, params, basicSeed = 4441L)
-    history.append(forkBlockb2) match {
+    // Test 5: try to add fork block b2
+    val transactionsForB2Fork = generateRegularTransactionsList(4, 4441)
+    val forkBlockB2: SidechainBlock = generateNextSidechainBlock(
+      genesisBlock,
+      sidechainTransactionsCompanion,
+      params,
+      basicSeed = 4441L,
+      transactionsForB2Fork)
+
+    history.append(forkBlockB2) match {
       case Success((hist, prog)) =>
         history = hist
         progressInfo = prog
@@ -177,13 +225,17 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
     // check
     assertEquals("Expected to have NOT updated height, best block was NOT changed.", 3, history.height)
-    assertTrue("Block expected to be present.", history.contains(forkBlockb2.id))
+    assertTrue("Block expected to be present.", history.contains(forkBlockB2.id))
     assertEquals("Different progress info expected.", ProgressInfo[SidechainBlock](None, Seq(), Seq(), Seq()), progressInfo)
 
+    transactionsForB2Fork.foreach{ transaction =>
+      val transactionInBlockChain = history.searchTransactionInsideBlockchain(transaction.id)
+      assertTrue("transactions shall be NOT found in blockchain", transactionInBlockChain.isEmpty)
+    }
 
     // Test 6: try to add block b3
     // score of b3 chain expected to be the same as B3 chain. So no chain switch expected.
-    val forkBlockb3: SidechainBlock = generateNextSidechainBlock(forkBlockb2, sidechainTransactionsCompanion, params, basicSeed = 199L)
+    val forkBlockb3: SidechainBlock = generateNextSidechainBlock(forkBlockB2, sidechainTransactionsCompanion, params, basicSeed = 199L)
     history.append(forkBlockb3) match {
       case Success((hist, prog)) =>
         history = hist
@@ -221,12 +273,12 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     assertTrue("Progress info chain switch expected.", progressInfo.branchPoint.isDefined)
     assertEquals("Different progress info branch point expected.", genesisBlock.id, progressInfo.branchPoint.get)
     assertEquals("Different progress info remove data expected", Seq(blockB2, blockB3), progressInfo.toRemove)
-    assertEquals("Different progress info apply data expected", Seq(forkBlockb2, forkBlockb3, forkBlockb4), progressInfo.toApply)
+    assertEquals("Different progress info apply data expected", Seq(forkBlockB2, forkBlockb3, forkBlockb4), progressInfo.toApply)
     assertTrue("Different progress info download data expected to be empty", progressInfo.toDownload.isEmpty)
 
 
     // notify history that appended block is valid
-    history = history.reportModifierIsValid(forkBlockb2)
+    history = history.reportModifierIsValid(forkBlockB2)
     history = history.reportModifierIsValid(forkBlockb3)
     history = history.reportModifierIsValid(forkBlockb4)
 
@@ -234,6 +286,10 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     assertEquals("Expected to have updated height, best block was changed.", 4, history.height)
     assertEquals("Expected to have different best block, best block was changed.", forkBlockb4.id , history.bestBlockId)
 
+    transactionsForB2Fork.foreach{ transaction =>
+      val transactionInBlockChain = history.searchTransactionInsideBlockchain(transaction.id).get
+      assertEquals("transactions shall be found in blockchain", transaction.id, transactionInBlockChain.id)
+    }
 
     // Test 8: try to add block B4, that contains invalid transactions
     val blockB4: SidechainBlock = generateNextSidechainBlock(blockB3, sidechainTransactionsCompanion, params, basicSeed = 888L)
@@ -294,10 +350,17 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
   @Test
   def bestForkChangesTest(): Unit = {
-    val sidechainHistoryStorage = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
-    // Init chain with 10 blocks
-    val historyTry = SidechainHistory.genesisHistory(sidechainHistoryStorage, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val transactionIndexesStorage = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
+    val historyTry = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage,
+      transactionIndexesStorage,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history creation expected to be successful. ", historyTry.isSuccess)
 
     var history = historyTry.get
@@ -380,9 +443,17 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
   @Test
   def applicableTryTest(): Unit = {
-    val sidechainHistoryStorage = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
-    val historyTry = SidechainHistory.genesisHistory(sidechainHistoryStorage, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val transactionIndexesStorage = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
+    val historyTry = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage,
+      transactionIndexesStorage,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history creation expected to be successful. ", historyTry.isSuccess)
 
     var history: SidechainHistory = historyTry.get
@@ -405,10 +476,18 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
 
   @Test
   def synchronizationTest(): Unit = {
-    val sidechainHistoryStorage1 = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage1 = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
+    val transactionIndexesStorage1 = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
     // Create first history object
-    val history1Try = SidechainHistory.genesisHistory(sidechainHistoryStorage1, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val history1Try = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage1,
+      transactionIndexesStorage1,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history1 creation expected to be successful. ", history1Try.isSuccess)
     var history1: SidechainHistory = history1Try.get
     // Init history1 with 19 more blocks
@@ -429,10 +508,18 @@ class SidechainHistoryTest extends JUnitSuite with MockitoSugar
     }
     assertEquals("Expected to have different height", 20, history1.height)
 
-    val sidechainHistoryStorage2 = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()),
+    val sidechainHistoryStorage2 = new SidechainBlocks(new IODBStoreAdapter(getStore()),
       sidechainTransactionsCompanion, params)
+    val transactionIndexesStorage2 = new TransactionIndexes(new IODBStoreAdapter(getStore()))
+
     // Create second history object
-    val history2Try = SidechainHistory.genesisHistory(sidechainHistoryStorage2, params, genesisBlock, Seq(new SidechainBlockSemanticValidator(params)), Seq())
+    val history2Try = SidechainHistory.genesisHistory(
+      sidechainHistoryStorage2,
+      transactionIndexesStorage2,
+      params,
+      genesisBlock,
+      Seq(new SidechainBlockSemanticValidator(params)),
+      Seq())
     assertTrue("Genesis history2 creation expected to be successful. ", history2Try.isSuccess)
     var history2: SidechainHistory = history2Try.get
     // Init history2 with 18 more blocks

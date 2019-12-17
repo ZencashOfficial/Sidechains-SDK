@@ -48,6 +48,7 @@ class SidechainApp @Inject()
    @Named("WalletTransactionStorage") val walletTransactionStorage: Storage,
    @Named("StateStorage") val stateStorage: Storage,
    @Named("HistoryStorage") val historyStorage: Storage,
+   @Named("TransactionIndexesStorage") val transactionIndexesStorage: Storage,
    @Named("CustomApiGroups") val customApiGroups: JList[ApplicationApiGroup],
    @Named("RejectedApiPaths") val rejectedApiPaths : JList[Pair[String, String]]
   )
@@ -127,11 +128,13 @@ class SidechainApp @Inject()
     //openStorage(new JFile(s"${sidechainSettings.scorexSettings.dataDir.getAbsolutePath}/state")),
     registerStorage(stateStorage),
     sidechainBoxesCompanion)
-  protected val sidechainHistoryStorage = new SidechainHistoryStorage(
+  protected val sidechainHistoryStorage = new SidechainBlocks(
     //openStorage(new JFile(s"${sidechainSettings.scorexSettings.dataDir.getAbsolutePath}/history")),
     registerStorage(historyStorage),
     sidechainTransactionsCompanion, params)
-
+  protected val transactionIndexes = new TransactionIndexes(
+    //openStorage(new JFile(s"${sidechainSettings.scorexSettings.dataDir.getAbsolutePath}/transactionIndexes")),
+    registerStorage(transactionIndexesStorage))
 
   // Append genesis secrets if we start the node first time
   if(sidechainSecretStorage.isEmpty) {
@@ -139,7 +142,9 @@ class SidechainApp @Inject()
       sidechainSecretStorage.add(PrivateKey25519Serializer.getSerializer.parseBytes(BytesUtils.fromHexString(secretHex)))
   }
 
-  override val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(sidechainSettings, sidechainHistoryStorage,
+  override val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(sidechainSettings,
+    sidechainHistoryStorage,
+    transactionIndexes,
     sidechainStateStorage,
     sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage, params, timeProvider,
     applicationWallet, applicationState, genesisBlock) // TO DO: why not to put genesisBlock as a part of params? REVIEW Params structure

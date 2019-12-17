@@ -5,7 +5,7 @@ import java.math.BigInteger
 import com.google.common.primitives.UnsignedInts
 import com.horizen.fixtures.{MainchainHeaderFixture, MainchainHeaderForPoWTest}
 import com.horizen.params.{MainNetParams, NetworkParams}
-import com.horizen.storage.SidechainHistoryStorage
+import com.horizen.storage.SidechainBlocks
 import com.horizen.utils.{BytesUtils, Utils}
 import org.junit.Assert.{assertEquals, assertFalse, assertTrue}
 import org.junit.Test
@@ -150,7 +150,7 @@ class ProofOfWorkVerifierTest extends JUnitSuite with MainchainHeaderFixture wit
     scblocks.append(createSCBlockForPowTest(scblocks.last.id, powRelatedDataList(26).mcblockhash, Seq(powRelatedDataList(27)))) // SCBlock with 1 MCBlockRef
 
     // mock History methods used in test
-    val storage = mock[SidechainHistoryStorage]
+    val storage = mock[SidechainBlocks]
     Mockito.when(storage.blockById(ArgumentMatchers.any[ModifierId]()))
       .thenAnswer(answer => {
         Some(scblocks.filter(block => block.id.equals(answer.getArgument(0))).head)

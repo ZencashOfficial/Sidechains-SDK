@@ -1,7 +1,7 @@
 package com.horizen.storage.performance
 import com.horizen.fixtures.TransactionFixture
 import com.horizen.proposition.PublicKey25519Proposition
-import com.horizen.secret.{PrivateKey25519, PrivateKey25519Creator}
+import com.horizen.secret.PrivateKey25519
 import com.horizen.transaction.RegularTransaction
 import com.horizen.utils.{ByteArrayWrapper, byteArrayToWrapper, Pair => JPair, _}
 import scorex.util.idToBytes
@@ -54,22 +54,8 @@ case class TransactionStorageDataGenerator(inputTransactionsSizeRange: Range,
   require(inputTransactionsSizeRange.step == 1)
   require(outputTransactionsSizeRange.step == 1)
 
-  private def generateRegularTransaction(): RegularTransaction = {
-    require(!inputTransactionsSizeRange.isEmpty)
-    val inputTransactionsSize = util.Random.nextInt(inputTransactionsSizeRange.size) + inputTransactionsSizeRange.start
-    val inputTransactionsList: Seq[PrivateKey25519] = (1 to inputTransactionsSize)
-      .map(_ => PrivateKey25519Creator.getInstance.generateSecret(util.Random.nextString(32).getBytes))
-
-    require(!outputTransactionsSizeRange.isEmpty)
-    val outputTransactionsSize = util.Random.nextInt(outputTransactionsSizeRange.size) + outputTransactionsSizeRange.start
-    val outputTransactionsList: Seq[PublicKey25519Proposition] = (1 to outputTransactionsSize)
-      .map(_ => PrivateKey25519Creator.getInstance.generateSecret(util.Random.nextString(32).getBytes).publicImage())
-
-    getRegularTransaction(inputTransactionsList, outputTransactionsList)
-  }
-
   private def generateTransactionEntry(): JPair[ByteArrayWrapper, ByteArrayWrapper] = {
-    val transaction: RegularTransaction = generateRegularTransaction()
+    val transaction: RegularTransaction = generateRegularTransaction(inputTransactionsSizeRange, outputTransactionsSizeRange)
     val transactionData: ByteArrayWrapper =  byteArrayToWrapper(transaction.bytes())
     val transactionId: ByteArrayWrapper = idToBytes(transaction.id)
     new JPair(transactionId, transactionData)

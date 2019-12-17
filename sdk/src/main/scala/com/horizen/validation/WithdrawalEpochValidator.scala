@@ -37,7 +37,7 @@ class WithdrawalEpochValidator(params: NetworkParams) extends HistoryBlockValida
       }
     }
 
-    history.storage.blockInfoById(block.parentId) match {
+    history.sidechainBlocks.blockInfoById(block.parentId) match {
       case Some(parentBlockInfo) => // Parent block is present
         val blockEpochInfo = WithdrawalEpochUtils.getWithdrawalEpochInfo(block, parentBlockInfo.withdrawalEpochInfo, params)
         if (blockEpochInfo.epoch > parentBlockInfo.withdrawalEpochInfo.epoch) { // epoch increased

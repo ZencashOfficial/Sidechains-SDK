@@ -24,7 +24,7 @@ import scorex.util.{ModifierId, idToBytes}
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
 
-class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with SidechainBlockFixture with SidechainBlockInfoFixture {
+class SidechainBlocksTest extends JUnitSuite with MockitoSugar with SidechainBlockFixture with SidechainBlockInfoFixture {
 
   val mockedStorage : Storage = mock[IODBStoreAdapter]
   val customTransactionSerializers: JHashMap[JByte, TransactionSerializer[SidechainTypes#SCBT]] = new JHashMap()
@@ -58,7 +58,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
     dataList
   }
 
-  private def checkMainchainReferences(historyStorage: SidechainHistoryStorage, blocks: Seq[SidechainBlock], blockIndex: Int): Unit = {
+  private def checkMainchainReferences(historyStorage: SidechainBlocks, blocks: Seq[SidechainBlock], blockIndex: Int): Unit = {
     val mainchainLength = blocks.take(blockIndex).map(b => b.mainchainBlocks.length).sum + params.mainchainCreationBlockHeight
 
     blocks(blockIndex).mainchainBlocks.zipWithIndex.foreach { case (mcBlock, mainchainReferenceIndex) =>
@@ -139,7 +139,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
   @Test
   def testGet(): Unit = {
-    val historyStorage = new SidechainHistoryStorage(mockedStorage, sidechainTransactionsCompanion, params)
+    val historyStorage = new SidechainBlocks(mockedStorage, sidechainTransactionsCompanion, params)
 
     // Test 0: check mainchain references
     (0 until height).foreach{ index => checkMainchainReferences(historyStorage, activeChainBlockList, index) }
@@ -280,8 +280,8 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
   @Test
   def testUpdates(): Unit = {
-    val historyStorage = new SidechainHistoryStorage(mockedStorage, sidechainTransactionsCompanion, params)
-    var tryRes: Try[SidechainHistoryStorage] = null
+    val historyStorage = new SidechainBlocks(mockedStorage, sidechainTransactionsCompanion, params)
+    var tryRes: Try[SidechainBlocks] = null
     val expectedException = new IllegalArgumentException("on update exception")
 
     val nextTipBlock = generateNextSidechainBlock(activeChainBlockList.last, sidechainTransactionsCompanion, params, basicSeed = 11119992L)
@@ -337,8 +337,8 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
   @Test
   def testUpdateSemanticValidity(): Unit = {
-    val historyStorage = new SidechainHistoryStorage(mockedStorage, sidechainTransactionsCompanion, params)
-    var tryRes: Try[SidechainHistoryStorage] = null
+    val historyStorage = new SidechainBlocks(mockedStorage, sidechainTransactionsCompanion, params)
+    var tryRes: Try[SidechainBlocks] = null
     val expectedException = new IllegalArgumentException("on update semantic validity exception")
 
 
@@ -414,8 +414,8 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
   @Test
   def testUpdateBestBlock(): Unit = {
-    val historyStorage = new SidechainHistoryStorage(mockedStorage, sidechainTransactionsCompanion, params)
-    var tryRes: Try[SidechainHistoryStorage] = null
+    val historyStorage = new SidechainBlocks(mockedStorage, sidechainTransactionsCompanion, params)
+    var tryRes: Try[SidechainBlocks] = null
     val expectedException = new IllegalArgumentException("on update best block exception")
 
     val newBestBlock = forkChainBlockList.head
@@ -458,7 +458,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
     var exceptionThrown = false
 
     try {
-      val stateStorage = new SidechainHistoryStorage(null, sidechainTransactionsCompanion, params)
+      val stateStorage = new SidechainBlocks(null, sidechainTransactionsCompanion, params)
     } catch {
       case e : IllegalArgumentException => exceptionThrown = true
       case e : Throwable => System.out.print(e.getMessage)
@@ -469,7 +469,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
     exceptionThrown = false
     try {
-      val stateStorage = new SidechainHistoryStorage(mockedStorage, null, params)
+      val stateStorage = new SidechainBlocks(mockedStorage, null, params)
     } catch {
       case e : IllegalArgumentException => exceptionThrown = true
     }
@@ -479,7 +479,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with MockitoSugar with Side
 
     exceptionThrown = false
     try {
-      val stateStorage = new SidechainHistoryStorage(mockedStorage, sidechainTransactionsCompanion, null)
+      val stateStorage = new SidechainBlocks(mockedStorage, sidechainTransactionsCompanion, null)
     } catch {
       case e : IllegalArgumentException => exceptionThrown = true
     }

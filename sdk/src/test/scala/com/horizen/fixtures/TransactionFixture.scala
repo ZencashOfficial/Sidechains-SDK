@@ -1,14 +1,36 @@
 package com.horizen.fixtures
 
-import com.horizen.transaction.RegularTransaction
-import com.horizen.secret.PrivateKey25519
-import com.horizen.box.RegularBox
 import java.util.{ArrayList => JArrayList, List => JList}
+
+import com.horizen.box.RegularBox
 import com.horizen.proposition.{MCPublicKeyHashProposition, PublicKey25519Proposition}
+import com.horizen.secret.{PrivateKey25519, PrivateKey25519Creator}
+import com.horizen.transaction.RegularTransaction
 import com.horizen.utils.{Pair => JPair}
+
 import scala.util.Random
 
 trait TransactionFixture extends BoxFixture {
+
+  def generateRegularTransactionsList(size: Int, seed: Int = util.Random.nextInt): Seq[RegularTransaction] = {
+    (1 to size).map(_ => generateRegularTransaction(3 to 7, 3 to 7))(collection.breakOut)
+  }
+
+  def generateRegularTransaction(inputTransactionsSizeRange: Range, outputTransactionsSizeRange: Range, seed: Int = util.Random.nextInt): RegularTransaction = {
+    util.Random.setSeed(seed)
+
+    require(!inputTransactionsSizeRange.isEmpty)
+    val inputTransactionsSize = util.Random.nextInt(inputTransactionsSizeRange.size) + inputTransactionsSizeRange.start
+    val inputTransactionsList: Seq[PrivateKey25519] = (1 to inputTransactionsSize)
+      .map(_ => PrivateKey25519Creator.getInstance.generateSecret(util.Random.nextString(32).getBytes))
+
+    require(!outputTransactionsSizeRange.isEmpty)
+    val outputTransactionsSize = util.Random.nextInt(outputTransactionsSizeRange.size) + outputTransactionsSizeRange.start
+    val outputTransactionsList: Seq[PublicKey25519Proposition] = (1 to outputTransactionsSize)
+      .map(_ => PrivateKey25519Creator.getInstance.generateSecret(util.Random.nextString(32).getBytes).publicImage())
+
+    getRegularTransaction(inputTransactionsList, outputTransactionsList)
+  }
 
   def getRegularTransaction(inputsSecrets: Seq[PrivateKey25519], outputPropositions: Seq[PublicKey25519Proposition]): RegularTransaction = {
     val from: JList[JPair[RegularBox,PrivateKey25519]] = new JArrayList[JPair[RegularBox,PrivateKey25519]]()

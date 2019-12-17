@@ -9,16 +9,15 @@ import com.horizen.chain.SidechainBlockInfo
 import com.horizen.companion.SidechainTransactionsCompanion
 import com.horizen.fixtures.{IODBStoreFixture, SidechainBlockFixture, SidechainBlockInfoFixture}
 import com.horizen.params.{MainNetParams, NetworkParams}
-import com.horizen.storage.{IODBStoreAdapter, SidechainHistoryStorage}
+import com.horizen.storage.{IODBStoreAdapter, SidechainBlocks}
 import com.horizen.transaction.TransactionSerializer
 import org.junit.Assert._
 import org.junit.Test
 import org.scalatest.junit.JUnitSuite
 import scorex.core.consensus.ModifierSemanticValidity
-import scorex.util.ModifierId
 
 
-class SidechainHistoryStorageTest extends JUnitSuite with SidechainBlockFixture with IODBStoreFixture with SidechainBlockInfoFixture {
+class SidechainBlocksTest extends JUnitSuite with SidechainBlockFixture with IODBStoreFixture with SidechainBlockInfoFixture {
 
   val customTransactionSerializers: JHashMap[JByte, TransactionSerializer[SidechainTypes#SCBT]] = new JHashMap()
   val sidechainTransactionsCompanion = SidechainTransactionsCompanion(customTransactionSerializers)
@@ -29,7 +28,7 @@ class SidechainHistoryStorageTest extends JUnitSuite with SidechainBlockFixture 
 
   @Test
   def mainWorkflow() : Unit = {
-    val historyStorage = new SidechainHistoryStorage(new IODBStoreAdapter(getStore()), sidechainTransactionsCompanion, params)
+    val historyStorage = new SidechainBlocks(new IODBStoreAdapter(getStore()), sidechainTransactionsCompanion, params)
 
     // Check that historyStorage is empty
     assertEquals("HistoryStorage expected to be empty", 0, historyStorage.height)

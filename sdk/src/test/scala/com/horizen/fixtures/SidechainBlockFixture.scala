@@ -107,12 +107,16 @@ trait SidechainBlockFixture extends MainchainBlockReferenceFixture {
     res
   }
 
-  def generateNextSidechainBlock(sidechainBlock: SidechainBlock, companion: SidechainTransactionsCompanion, params: NetworkParams, basicSeed: Long = 123177L): SidechainBlock = {
+  def generateNextSidechainBlock(sidechainBlock: SidechainBlock,
+                                 companion: SidechainTransactionsCompanion,
+                                 params: NetworkParams,
+                                 basicSeed: Long = 123177L,
+                                 transactions: Seq[SidechainTransaction[Proposition, NoncedBox[Proposition]]] = Seq()): SidechainBlock = {
     SidechainBlock.create(
       sidechainBlock.id,
       sidechainBlock.timestamp + 10,
       Seq(),
-      Seq(),
+      transactions,
       PrivateKey25519Creator.getInstance().generateSecret("seed%d".format(basicSeed).getBytes),
       companion,
       params

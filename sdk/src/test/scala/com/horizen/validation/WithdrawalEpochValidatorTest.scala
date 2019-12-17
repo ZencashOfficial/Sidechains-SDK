@@ -12,7 +12,7 @@ import com.horizen.fixtures.{MainchainBlockReferenceFixture, TransactionFixture}
 import com.horizen.params.{NetworkParams, RegTestParams}
 import com.horizen.proposition.Proposition
 import com.horizen.secret.PrivateKey25519Creator
-import com.horizen.storage.SidechainHistoryStorage
+import com.horizen.storage.SidechainBlocks
 import com.horizen.transaction.SidechainTransaction
 import com.horizen.utils.{ByteArrayWrapper, BytesUtils, WithdrawalEpochInfo}
 import org.junit.{Before, Test}
@@ -30,13 +30,13 @@ class WithdrawalEpochValidatorTest extends JUnitSuite with MockitoSugar with Mai
   val sidechainTransactionsCompanion = SidechainTransactionsCompanion(new JHashMap())
 
   val params: NetworkParams = mock[NetworkParams]
-  val historyStorage: SidechainHistoryStorage = mock[SidechainHistoryStorage]
+  val historyStorage: SidechainBlocks = mock[SidechainBlocks]
   val history: SidechainHistory = mock[SidechainHistory]
 
 
   @Before
   def setUp(): Unit = {
-    Mockito.when(history.storage).thenReturn(historyStorage)
+    Mockito.when(history.sidechainBlocks).thenReturn(historyStorage)
   }
 
   @Test

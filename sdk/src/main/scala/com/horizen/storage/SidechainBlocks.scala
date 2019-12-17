@@ -19,7 +19,7 @@ import scala.util.{Failure, Random, Success, Try}
 
 
 
-class SidechainHistoryStorage(storage: Storage, sidechainTransactionsCompanion: SidechainTransactionsCompanion, params: NetworkParams)
+class SidechainBlocks(storage: Storage, sidechainTransactionsCompanion: SidechainTransactionsCompanion, params: NetworkParams)
   extends ScorexLogging {
   // Version - RandomBytes(32)
 
@@ -166,7 +166,7 @@ class SidechainHistoryStorage(storage: Storage, sidechainTransactionsCompanion: 
     new MainchainBlockReferenceInfo(mcId, referenceInfo.getParentId, genesisHeight, idToBytes(sidechainBlockId))
   }
 
-  def update(block: SidechainBlock, blockInfo: SidechainBlockInfo): Try[SidechainHistoryStorage] = Try {
+  def update(block: SidechainBlock, blockInfo: SidechainBlockInfo): Try[SidechainBlocks] = Try {
     require(block != null, "SidechainBlock must be NOT NULL.")
     require(block.parentId == blockInfo.parentId, "Passed BlockInfo data conflicts to passed Block.")
 
@@ -193,7 +193,7 @@ class SidechainHistoryStorage(storage: Storage, sidechainTransactionsCompanion: 
     }
   }
 
-  def updateSemanticValidity(block: SidechainBlock, status: ModifierSemanticValidity): Try[SidechainHistoryStorage] = Try {
+  def updateSemanticValidity(block: SidechainBlock, status: ModifierSemanticValidity): Try[SidechainBlocks] = Try {
     // if it's not a part of active chain, retrieve previous info from disk storage
     val oldInfo: SidechainBlockInfo = activeChain.blockInfoById(block.id).getOrElse(blockInfoById(block.id).get)
     val blockInfo = oldInfo.copy(semanticValidity = status)
@@ -207,7 +207,7 @@ class SidechainHistoryStorage(storage: Storage, sidechainTransactionsCompanion: 
     this
   }
 
-  def setAsBestBlock(block: SidechainBlock, blockInfo: SidechainBlockInfo): Try[SidechainHistoryStorage] = Try {
+  def setAsBestBlock(block: SidechainBlock, blockInfo: SidechainBlockInfo): Try[SidechainBlocks] = Try {
     storage.update(
       new ByteArrayWrapper(nextVersion),
       java.util.Arrays.asList(new JPair(bestBlockIdKey, new ByteArrayWrapper(idToBytes(block.id)))),

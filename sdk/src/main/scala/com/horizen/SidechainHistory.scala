@@ -7,7 +7,7 @@ import com.horizen.chain.SidechainBlockInfo
 import com.horizen.node.NodeHistory
 import com.horizen.node.util.MainchainBlockReferenceInfo
 import com.horizen.params.NetworkParams
-import com.horizen.storage.SidechainHistoryStorage
+import com.horizen.storage.{SidechainBlocks, TransactionIndexes}
 import com.horizen.transaction.Transaction
 import com.horizen.utils.{BytesUtils, WithdrawalEpochInfo, WithdrawalEpochUtils}
 import com.horizen.validation.{HistoryBlockValidator, SemanticBlockValidator}
@@ -21,7 +21,8 @@ import scala.compat.java8.OptionConverters._
 import scala.util.{Failure, Success, Try}
 
 
-class SidechainHistory private (val storage: SidechainHistoryStorage,
+class SidechainHistory private (val sidechainBlocks: SidechainBlocks,
+                                transactionIndexes: TransactionIndexes,
                                 params: NetworkParams,
                                 semanticBlockValidators: Seq[SemanticBlockValidator],
                                 historyBlockValidators: Seq[HistoryBlockValidator])
@@ -37,10 +38,10 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
 
   require(NodeViewModifier.ModifierIdSize == 32, "32 bytes ids assumed")
 
-  def height: Int = storage.height
-  def bestBlockId: ModifierId = storage.bestBlockId
-  def bestBlock: SidechainBlock = storage.bestBlock
-  def bestBlockInfo: SidechainBlockInfo = storage.bestBlockInfo
+  def height: Int = sidechainBlocks.height
+  def bestBlockId: ModifierId = sidechainBlocks.bestBlockId
+  def bestBlock: SidechainBlock = sidechainBlocks.bestBlock
+  def bestBlockInfo: SidechainBlockInfo = sidechainBlocks.bestBlockInfo
 
   // Note: if block already exists in History it will be declined inside NodeViewHolder before appending.
   override def append(block: SidechainBlock): Try[(SidechainHistory, ProgressInfo[SidechainBlock])] = Try {
@@ -48,17 +49,17 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
       validator.validate(block).get
 
     // Non-genesis blocks mast have a parent already present in History
-    val parentBlockInfoOption: Option[SidechainBlockInfo] = storage.blockInfoById(block.parentId)
+    val parentBlockInfoOption: Option[SidechainBlockInfo] = sidechainBlocks.blockInfoById(block.parentId)
     if(!isGenesisBlock(block.id) && parentBlockInfoOption.isEmpty)
       throw new IllegalArgumentException("Sidechain block %s appending failed: parent block is missed.".format(BytesUtils.toHexString(idToBytes(block.id))))
 
     for(validator <- historyBlockValidators)
       validator.validate(block, this).get
 
-    val (newStorage: Try[SidechainHistoryStorage], progressInfo: ProgressInfo[SidechainBlock]) = {
+    val (newStorage: Try[SidechainBlocks], progressInfo: ProgressInfo[SidechainBlock]) = {
       if(isGenesisBlock(block.id)) {
         (
-          storage.update(block, calculateGenesisBlockInfo(block)),
+          sidechainBlocks.update(block, calculateGenesisBlockInfo(block)),
           ProgressInfo(None, Seq(), Seq(block), Seq())
         )
       }
@@ -68,7 +69,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
         // Check if we retrieved the next block of best chain
         if (block.parentId.equals(bestBlockId)) {
           (
-            storage.update(block, blockInfo),
+            sidechainBlocks.update(block, blockInfo),
             ProgressInfo(None, Seq(), Seq(block), Seq())
           )
         } else {
@@ -77,13 +78,13 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
             bestForkChanges(block) match { // get info to switch to another chain
               case Success(progInfo) =>
                 (
-                  storage.update(block, blockInfo),
+                  sidechainBlocks.update(block, blockInfo),
                   progInfo
                 )
               case Failure(e) =>
                 //log.error("New best block found, but it can not be applied: %s".format(e.getMessage))
                 (
-                  storage.update(block, blockInfo),
+                  sidechainBlocks.update(block, blockInfo),
                   // TO DO: we should somehow prevent growing of such chain (penalize the peer?)
                   ProgressInfo[SidechainBlock](None, Seq(), Seq(), Seq())
                 )
@@ -92,14 +93,14 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
           } else {
             // We retrieved block from another chain that is not the best one
             (
-              storage.update(block, blockInfo),
+              sidechainBlocks.update(block, blockInfo),
               ProgressInfo[SidechainBlock](None, Seq(), Seq(), Seq())
             )
           }
         }
       }
     }
-    new SidechainHistory(newStorage.get, params, semanticBlockValidators, historyBlockValidators) -> progressInfo
+    new SidechainHistory(newStorage.get, transactionIndexes, params, semanticBlockValidators, historyBlockValidators) -> progressInfo
   }
 
   def isGenesisBlock(blockId: ModifierId): Boolean = {
@@ -107,7 +108,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
   }
 
   def isBestBlock(block: SidechainBlock, parentScore: Long): Boolean = {
-    val currentScore = storage.chainScoreFor(bestBlockId).get
+    val currentScore = sidechainBlocks.chainScoreFor(bestBlockId).get
     val newScore = calculateChainScore(block, parentScore)
     newScore > currentScore
   }
@@ -153,8 +154,8 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
 
     if(newChainSuffixValidity) {
       val rollbackPoint = newChainSuffix.headOption
-      val toRemove = currentChainSuffix.tail.map(id => storage.blockById(id).get)
-      val toApply = newChainSuffix.tail.map(id => storage.blockById(id).get) ++ Seq(block)
+      val toRemove = currentChainSuffix.tail.map(id => sidechainBlocks.blockById(id).get)
+      val toApply = newChainSuffix.tail.map(id => sidechainBlocks.blockById(id).get) ++ Seq(block)
 
       require(toRemove.nonEmpty)
       require(toApply.nonEmpty)
@@ -169,14 +170,14 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
   // Find common suffixes for two chains - starting from forkBlock and from bestBlock.
   // Returns last common block and then variant blocks for two chains.
   private def commonBlockSuffixes(forkBlock: SidechainBlock): (Seq[ModifierId], Seq[ModifierId]) = {
-    chainBack(forkBlock.id, storage.isInActiveChain, Int.MaxValue) match {
+    chainBack(forkBlock.id, sidechainBlocks.isInActiveChain, Int.MaxValue) match {
       case Some(newBestChain) =>
-        val commonBlockHeight = storage.blockInfoById(newBestChain.head).get.height
+        val commonBlockHeight = sidechainBlocks.blockInfoById(newBestChain.head).get.height
         if(height - commonBlockHeight > params.maxHistoryRewritingLength)
           // fork length is more than params.maxHistoryRewritingLength
           (Seq[ModifierId](), Seq[ModifierId]())
         else
-          (newBestChain, storage.activeChainAfter(newBestChain.head))
+          (newBestChain, sidechainBlocks.activeChainAfter(newBestChain.head))
 
       case None => (Seq[ModifierId](), Seq[ModifierId]())
     }
@@ -195,7 +196,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
     var id = blockId
 
     while(acc.size < limit && !until(id)) {
-      storage.parentBlockId(id) match {
+      sidechainBlocks.parentBlockId(id) match {
         case Some(parentId) =>
           acc = parentId +: acc
           id = parentId
@@ -208,20 +209,21 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
   }
 
   override def reportModifierIsValid(block: SidechainBlock): SidechainHistory = {
-      var newStorage = storage.updateSemanticValidity(block, ModifierSemanticValidity.Valid).get
-      newStorage = newStorage.setAsBestBlock(block, storage.blockInfoById(block.id).get).get
-      new SidechainHistory(newStorage, params, semanticBlockValidators, historyBlockValidators)
+      var newStorage = sidechainBlocks.updateSemanticValidity(block, ModifierSemanticValidity.Valid).get
+      newStorage = newStorage.setAsBestBlock(block, sidechainBlocks.blockInfoById(block.id).get).get
+      transactionIndexes.indexBlock(block) //shall be done here not during adding block to the history, otherwise index will
+      new SidechainHistory(newStorage, transactionIndexes, params, semanticBlockValidators, historyBlockValidators)
   }
 
   override def reportModifierIsInvalid(modifier: SidechainBlock, progressInfo: History.ProgressInfo[SidechainBlock]): (SidechainHistory, History.ProgressInfo[SidechainBlock]) = { // to do
     val newHistory: SidechainHistory = Try {
-      val newStorage = storage.updateSemanticValidity(modifier, ModifierSemanticValidity.Invalid).get
-      new SidechainHistory(newStorage, params, semanticBlockValidators, historyBlockValidators)
+      val newStorage = sidechainBlocks.updateSemanticValidity(modifier, ModifierSemanticValidity.Invalid).get
+      new SidechainHistory(newStorage, transactionIndexes, params, semanticBlockValidators, historyBlockValidators)
     } match {
       case Success(history) => history
       case Failure(e) =>
         //log.error(s"Failed to update validity for block ${encoder.encode(block.id)} with error ${e.getMessage}.")
-        new SidechainHistory(storage, params, semanticBlockValidators, historyBlockValidators)
+        new SidechainHistory(sidechainBlocks, transactionIndexes, params, semanticBlockValidators, historyBlockValidators)
     }
 
     // In case when we try to apply some fork, which contains at least one invalid block, we should return to the State and History to the "state" before fork.
@@ -236,7 +238,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
 
   override def isEmpty: Boolean = height <= 0
 
-  override def contains(id: ModifierId): Boolean = storage.blockInfoById(id).isDefined
+  override def contains(id: ModifierId): Boolean = sidechainBlocks.blockInfoById(id).isDefined
 
   override def applicableTry(block: SidechainBlock): Try[Unit] = {
     if (!contains(block.parentId))
@@ -245,10 +247,10 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
       Success()
   }
 
-  override def modifierById(blockId: ModifierId): Option[SidechainBlock] = storage.blockById(blockId)
+  override def modifierById(blockId: ModifierId): Option[SidechainBlock] = sidechainBlocks.blockById(blockId)
 
   override def isSemanticallyValid(blockId: ModifierId): ModifierSemanticValidity = {
-    storage.semanticValidity(blockId)
+    sidechainBlocks.semanticValidity(blockId)
   }
 
   override def openSurfaceIds(): Seq[ModifierId] = {
@@ -260,9 +262,9 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
 
 
   override def continuationIds(info: SidechainSyncInfo, size: Int): ModifierIds = {
-    info.knownBlockIds.find(id => storage.isInActiveChain(id)) match {
+    info.knownBlockIds.find(id => sidechainBlocks.isInActiveChain(id)) match {
       case Some(commonBlockId) =>
-        storage.activeChainAfter(commonBlockId).tail.take(size).map(id => (SidechainBlock.ModifierTypeId, id))
+        sidechainBlocks.activeChainAfter(commonBlockId).tail.take(size).map(id => (SidechainBlock.ModifierTypeId, id))
       case None =>
         //log.warn("Found chain without common block ids from remote")
         Seq()
@@ -294,7 +296,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
     // collect control points of block ids like in bitcoin (last 10, then increase step exponentially until genesis block)
     SidechainSyncInfo(
       // return a sequence of block ids for given blocks height backward starting from blockId
-      knownBlocksHeightToSync().map(height => storage.activeChainBlockId(height).get)
+      knownBlocksHeightToSync().map(height => sidechainBlocks.activeChainBlockId(height).get)
     )
 
   }
@@ -312,7 +314,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
       restOfOtherBlockIds = restOfOtherBlockIds.tail
       suffix = blockId +: suffix
 
-      if(storage.isInActiveChain(blockId))
+      if(sidechainBlocks.isInActiveChain(blockId))
         return suffix
     }
     Seq() // we didn't find common block (even genesis one is different) -> we have totally different chains.
@@ -337,15 +339,15 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
         else
           Younger
       case _ =>
-        val otherBestKnownBlockIndex = dSuffix.size - 1 - dSuffix.reverse.indexWhere(id => storage.heightOf(id).isDefined)
-        val otherBestKnownBlockHeight = storage.heightOf(dSuffix(otherBestKnownBlockIndex)).get
+        val otherBestKnownBlockIndex = dSuffix.size - 1 - dSuffix.reverse.indexWhere(id => sidechainBlocks.heightOf(id).isDefined)
+        val otherBestKnownBlockHeight = sidechainBlocks.heightOf(dSuffix(otherBestKnownBlockIndex)).get
         // other node height can be approximatly calculated as height of other KNOWN best block height + size of rest unknown blocks after it.
         // why approximately? see knownBlocksHeightToSync algorithm: blocks to sync step increasing.
         // to do: need to discuss
         val otherBestBlockApproxHeight = otherBestKnownBlockHeight + (dSuffix.size - 1 - otherBestKnownBlockIndex)
-        if (storage.height < otherBestBlockApproxHeight)
+        if (sidechainBlocks.height < otherBestBlockApproxHeight)
           Older
-        else if (storage.height == otherBestBlockApproxHeight) {
+        else if (sidechainBlocks.height == otherBestBlockApproxHeight) {
           if(otherBestBlockApproxHeight == otherBestKnownBlockHeight)
             Equal // UPDATE: FORK in both cases
           else
@@ -357,7 +359,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
   }
 
   override def getBlockById(blockId: String): JOptional[SidechainBlock] = {
-    storage.blockById(ModifierId(blockId)).asJava
+    sidechainBlocks.blockById(ModifierId(blockId)).asJava
   }
 
   override def getLastBlockIds(count: Int): JList[String] = {
@@ -368,7 +370,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
       var id = bestBlockId
       blockList.add(id)
       while (blockList.size < count && !isGenesisBlock(id)) {
-        val parentBlockId = storage.parentBlockId(id).get
+        val parentBlockId = sidechainBlocks.parentBlockId(id).get
         blockList.add(parentBlockId)
         id = parentBlockId
       }
@@ -381,7 +383,7 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
   }
 
   override def getBlockIdByHeight(height: Int): JOptional[String] = {
-    storage.activeChainBlockId(height) match {
+    sidechainBlocks.activeChainBlockId(height) match {
       case Some(blockId) => JOptional.of[String](blockId)
       case None => JOptional.empty()
     }
@@ -392,84 +394,71 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
     height
   }
 
-  override def searchTransactionInsideSidechainBlock(transactionId: String, blockId: String): JOptional[Transaction] = {
-    storage.blockById(ModifierId(blockId)) match {
-      case Some(scBlock) => findTransactionInsideBlock(transactionId, scBlock)
-      case None => JOptional.empty()
-    }
+
+  private def findTransactionInBlock(transactionId: ModifierId, block: SidechainBlock) : Option[Transaction] = {
+    block.transactions.find(box => box.id.equals(transactionId))
   }
 
-  private def findTransactionInsideBlock(transactionId : String, block : SidechainBlock) : JOptional[Transaction] = {
-    block.transactions.find(box => box.id.equals(ModifierId(transactionId))) match {
-      case Some(tx) => JOptional.ofNullable(tx)
-      case None => JOptional.empty()
-    }
+  private def findTransactionInBlockId(transactionId: ModifierId, blockId: ModifierId): Option[Transaction] = {
+    sidechainBlocks.blockById(blockId).flatMap(block => findTransactionInBlock(transactionId, block))
+  }
+
+  override def searchTransactionInsideSidechainBlock(transactionId: String, blockId: String): JOptional[Transaction] = {
+    findTransactionInBlockId(ModifierId(transactionId), ModifierId(blockId)).asJava
   }
 
   override def searchTransactionInsideBlockchain(transactionId: String): JOptional[Transaction] = {
-    var startingBlock = JOptional.ofNullable(getBestBlock)
-    var transaction : JOptional[Transaction] = JOptional.empty()
-    var found = false
-    while(!found && startingBlock.isPresent){
-      var tx = findTransactionInsideBlock(transactionId, startingBlock.get())
-      if(tx.isPresent){
-        found = true
-        transaction = JOptional.ofNullable(tx.get())
-      }else{
-        startingBlock = storage.parentBlockId(startingBlock.get().id) match {
-          case Some(id) => storage.blockById(id) match {
-            case Some(block) => JOptional.ofNullable(block)
-            case None => JOptional.empty()
-          }
-          case None => JOptional.empty()
-        }
-      }
-    }
+    val trId: ModifierId = ModifierId(transactionId)
 
-    transaction
+    transactionIndexes.getBlockIdByTransactionId(trId)
+      .withFilter(sidechainBlocks.isInActiveChain)
+      .flatMap(findTransactionInBlockId(trId, _))
+      .asJava
   }
 
   override def getMainchainCreationBlockHeight: Int = params.mainchainCreationBlockHeight
 
   override def getBestMainchainBlockReferenceInfo: JOptional[MainchainBlockReferenceInfo] = {
-    storage.getBestMainchainBlockReferenceInfo.asJava
+    sidechainBlocks.getBestMainchainBlockReferenceInfo.asJava
   }
 
   override def getMainchainBlockReferenceInfoByMainchainBlockHeight(height: Int): JOptional[MainchainBlockReferenceInfo] = {
-    storage.getMainchainBlockReferenceInfoByMainchainBlockHeight(height).asJava
+    sidechainBlocks.getMainchainBlockReferenceInfoByMainchainBlockHeight(height).asJava
   }
 
   override def getMainchainBlockReferenceInfoByHash(mainchainBlockReferenceHash: Array[Byte]): JOptional[MainchainBlockReferenceInfo] = {
-    storage.getMainchainBlockReferenceInfoByHash(mainchainBlockReferenceHash).asJava
+    sidechainBlocks.getMainchainBlockReferenceInfoByHash(mainchainBlockReferenceHash).asJava
   }
 
   override def getMainchainBlockReferenceByHash(mainchainBlockReferenceHash: Array[Byte]): JOptional[MainchainBlockReference] = {
-    storage.getMainchainBlockReferenceByHash(mainchainBlockReferenceHash).asJava
+    sidechainBlocks.getMainchainBlockReferenceByHash(mainchainBlockReferenceHash).asJava
   }
 }
 
 
 object SidechainHistory
 {
-  private[horizen] def restoreHistory(historyStorage: SidechainHistoryStorage,
+  private[horizen] def restoreHistory(historyStorage: SidechainBlocks,
+                                      transactionIndexes: TransactionIndexes,
                                       params: NetworkParams,
                                       semanticBlockValidators: Seq[SemanticBlockValidator],
                                       historyBlockValidators: Seq[HistoryBlockValidator]) : Option[SidechainHistory] = {
 
     if (!historyStorage.isEmpty)
-      Some(new SidechainHistory(historyStorage, params, semanticBlockValidators, historyBlockValidators))
+      Some(new SidechainHistory(historyStorage, transactionIndexes, params, semanticBlockValidators, historyBlockValidators))
     else
       None
   }
 
-  private[horizen] def genesisHistory(historyStorage: SidechainHistoryStorage,
+  private[horizen] def genesisHistory(historyStorage: SidechainBlocks,
+                                      transactionIndexes: TransactionIndexes,
                                       params: NetworkParams,
                                       genesisBlock: SidechainBlock,
                                       semanticBlockValidators: Seq[SemanticBlockValidator],
                                       historyBlockValidators: Seq[HistoryBlockValidator]) : Try[SidechainHistory] = Try {
 
     if (historyStorage.isEmpty)
-      new SidechainHistory(historyStorage, params, semanticBlockValidators, historyBlockValidators)
+      new SidechainHistory(historyStorage, transactionIndexes, params, semanticBlockValidators, historyBlockValidators)
         .append(genesisBlock).map(_._1).get.reportModifierIsValid(genesisBlock)
     else
       throw new RuntimeException("History storage is not empty!")

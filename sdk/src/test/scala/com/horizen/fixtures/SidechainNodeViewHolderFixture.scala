@@ -10,14 +10,13 @@ import com.horizen.api.http.{SidechainApiErrorHandler, SidechainTransactionActor
 import com.horizen.block.{ProofOfWorkVerifier, SidechainBlock, SidechainBlockSerializer}
 import com.horizen.box.BoxSerializer
 import com.horizen.companion.{SidechainBoxesCompanion, SidechainSecretsCompanion, SidechainTransactionsCompanion}
-import com.horizen.params.{MainNetParams, NetworkParams, RegTestParams, TestNetParams}
 import com.horizen.customtypes.{DefaultApplicationState, DefaultApplicationWallet}
+import com.horizen.params.{MainNetParams, NetworkParams, RegTestParams, TestNetParams}
 import com.horizen.secret.{PrivateKey25519Serializer, SecretSerializer}
 import com.horizen.state.ApplicationState
-import com.horizen.storage.{IODBStoreAdapter, SidechainHistoryStorage, SidechainSecretStorage, SidechainStateStorage, SidechainWalletBoxStorage, SidechainWalletTransactionStorage, Storage}
+import com.horizen.storage._
 import com.horizen.transaction.TransactionSerializer
 import com.horizen.utils.BytesUtils
-import com.horizen.validation.{MainchainPoWValidator, SidechainBlockSemanticValidator, WithdrawalEpochValidator}
 import com.horizen.wallet.ApplicationWallet
 import com.horizen.{SidechainNodeViewHolderRef, SidechainSettings, SidechainSettingsReader, SidechainTypes}
 import scorex.core.api.http.ApiRejectionHandler
@@ -90,12 +89,13 @@ trait SidechainNodeViewHolderFixture
   val sidechainStateStorage = new SidechainStateStorage(
     getStorage(),
     sidechainBoxesCompanion)
-  val sidechainHistoryStorage = new SidechainHistoryStorage(
+  val sidechainHistoryStorage = new SidechainBlocks(
     getStorage(),
     sidechainTransactionsCompanion, params)
   val sidechainWalletTransactionStorage = new SidechainWalletTransactionStorage(
     getStorage(),
     sidechainTransactionsCompanion)
+  val transactionIndexesStorage = new TransactionIndexes(getStorage())
 
   // Append genesis secrets if we start the node first time
   if(sidechainSecretStorage.isEmpty) {
@@ -103,7 +103,10 @@ trait SidechainNodeViewHolderFixture
       sidechainSecretStorage.add(PrivateKey25519Serializer.getSerializer.parseBytes(BytesUtils.fromHexString(secretHex)))
   }
 
-  val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(sidechainSettings, sidechainHistoryStorage,
+  val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(
+    sidechainSettings,
+    sidechainHistoryStorage,
+    transactionIndexesStorage,
     sidechainStateStorage,
     sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage, params, timeProvider,
     defaultApplicationWallet, defaultApplicationState, genesisBlock)
