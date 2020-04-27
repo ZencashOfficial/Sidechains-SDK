@@ -47,6 +47,11 @@ with ScorexLogging
     }
   }
 
+  def getAll : List[SidechainTypes#SCBT] = {
+    storage.getAll.asScala.map(baw => {
+      sidechainTransactionsCompanion.parseBytes(baw.getValue.data).asInstanceOf[SidechainTypes#SCBT]
+    }).toList
+  }
 
   def update (version : ByteArrayWrapper, transactionUpdateList : Seq[SidechainTypes#SCBT]) : Try[SidechainWalletTransactionStorage] = Try {
     require(transactionUpdateList != null, "List of Transactions to add/update must be NOT NULL. Use empty List instead.")

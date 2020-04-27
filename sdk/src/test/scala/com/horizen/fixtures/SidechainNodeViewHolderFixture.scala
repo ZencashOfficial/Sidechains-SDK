@@ -14,7 +14,7 @@ import com.horizen.params.{MainNetParams, NetworkParams, RegTestParams, TestNetP
 import com.horizen.customtypes.{DefaultApplicationState, DefaultApplicationWallet}
 import com.horizen.secret.{PrivateKey25519Serializer, SecretSerializer}
 import com.horizen.state.ApplicationState
-import com.horizen.storage.{IODBStoreAdapter, SidechainHistoryStorage, SidechainSecretStorage, SidechainStateStorage, SidechainWalletBoxStorage, SidechainWalletTransactionStorage, Storage}
+import com.horizen.storage.{IODBStoreAdapter, SidechainHistoryStorage, SidechainOpenedWalletBoxStorage, SidechainSecretStorage, SidechainStateStorage, SidechainWalletBoxStorage, SidechainWalletTransactionStorage, Storage}
 import com.horizen.transaction.TransactionSerializer
 import com.horizen.utils.BytesUtils
 import com.horizen.validation.{MainchainPoWValidator, SidechainBlockSemanticValidator, WithdrawalEpochValidator}
@@ -96,6 +96,9 @@ trait SidechainNodeViewHolderFixture
   val sidechainWalletTransactionStorage = new SidechainWalletTransactionStorage(
     getStorage(),
     sidechainTransactionsCompanion)
+  val sidechainOpenedWalletBoxStorage = new SidechainOpenedWalletBoxStorage(
+    getStorage(),
+    sidechainBoxesCompanion)
 
   // Append genesis secrets if we start the node first time
   if(sidechainSecretStorage.isEmpty) {
@@ -105,7 +108,8 @@ trait SidechainNodeViewHolderFixture
 
   val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(sidechainSettings, sidechainHistoryStorage,
     sidechainStateStorage,
-    sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage, params, timeProvider,
+    sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage,
+    sidechainOpenedWalletBoxStorage, params, timeProvider,
     defaultApplicationWallet, defaultApplicationState, genesisBlock)
 
   val sidechainTransactionActorRef : ActorRef = SidechainTransactionActorRef(nodeViewHolderRef)

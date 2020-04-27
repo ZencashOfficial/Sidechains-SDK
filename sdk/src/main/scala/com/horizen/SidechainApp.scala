@@ -46,6 +46,8 @@ class SidechainApp @Inject()
    @Named("SecretStorage") val secretStorage: Storage,
    @Named("WalletBoxStorage") val walletBoxStorage: Storage,
    @Named("WalletTransactionStorage") val walletTransactionStorage: Storage,
+   @Named("OpenedWalletBoxStorage") val openedWalletBoxStorage: Storage,
+   @Named("WalletBoxOperationStorage") val walletBoxOperationStorage: Storage,
    @Named("StateStorage") val stateStorage: Storage,
    @Named("HistoryStorage") val historyStorage: Storage,
    @Named("CustomApiGroups") val customApiGroups: JList[ApplicationApiGroup],
@@ -123,6 +125,9 @@ class SidechainApp @Inject()
     //openStorage(new JFile(s"${sidechainSettings.scorexSettings.dataDir.getAbsolutePath}/walletTransaction")),
     registerStorage(walletTransactionStorage),
     sidechainTransactionsCompanion)
+  protected val sidechainOpenedWalletBoxStorage = new SidechainOpenedWalletBoxStorage(
+    registerStorage(openedWalletBoxStorage),
+    sidechainBoxesCompanion)
   protected val sidechainStateStorage = new SidechainStateStorage(
     //openStorage(new JFile(s"${sidechainSettings.scorexSettings.dataDir.getAbsolutePath}/state")),
     registerStorage(stateStorage),
@@ -141,7 +146,8 @@ class SidechainApp @Inject()
 
   override val nodeViewHolderRef: ActorRef = SidechainNodeViewHolderRef(sidechainSettings, sidechainHistoryStorage,
     sidechainStateStorage,
-    sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage, params, timeProvider,
+    sidechainWalletBoxStorage, sidechainSecretStorage, sidechainWalletTransactionStorage,
+    sidechainOpenedWalletBoxStorage, params, timeProvider,
     applicationWallet, applicationState, genesisBlock) // TO DO: why not to put genesisBlock as a part of params? REVIEW Params structure
 
 
