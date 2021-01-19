@@ -17,10 +17,12 @@ import scorex.util.{ModifierId, ScorexLogging}
 import com.horizen.chain._
 import com.horizen.vrf.VrfOutput
 
+import scala.collection.convert.ImplicitConversions.`collection AsScalaIterable`
 import scala.util.{Failure, Success, Try}
 
 class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
                           companion: SidechainTransactionsCompanion,
+                          applicationForger: ApplicationForger,
                           val params: NetworkParams,
                           allowNoWebsocketConnectionInRegtest: Boolean) extends ScorexLogging with TimeToEpochSlotConverter {
   type ForgeMessageType = GetDataFromCurrentView[SidechainHistory, SidechainState, SidechainWallet, SidechainMemoryPool, ForgeResult]
@@ -225,9 +227,13 @@ class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
       if (branchPointInfo.referenceDataToInclude.size == withdrawalEpochMcBlocksLeft) { // SC block is going to become the last block of the withdrawal epoch
         Seq() // no SC Txs allowed
       } else { // SC block is in the middle of the epoch
-        nodeView.pool.take(SidechainBlock.MAX_SIDECHAIN_TXS_NUMBER) // TO DO: problems with types
+        val mempoolTransactions = nodeView.pool.take(SidechainBlock.MAX_SIDECHAIN_TXS_NUMBER) // TO DO: problems with types
           .map(t => t.asInstanceOf[SidechainTransaction[Proposition, NoncedBox[Proposition]]])
-          .toSeq
+
+        val applicationForgeTransactions = applicationForger.onForge(parentBlockInfo, blockSignPrivateKey.publicImage())
+          .map(t => t.asInstanceOf[SidechainTransaction[Proposition, NoncedBox[Proposition]]])
+
+        mempoolTransactions.toSeq.union(applicationForgeTransactions.toSeq)
       }
 
     // Get ommers in case if branch point is not current best block

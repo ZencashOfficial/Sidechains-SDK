@@ -25,8 +25,9 @@ class Forger(settings: SidechainSettings,
              viewHolderRef: ActorRef,
              mainchainSynchronizer: MainchainSynchronizer,
              companion: SidechainTransactionsCompanion,
+             applicationForger: ApplicationForger,
              val params: NetworkParams) extends Actor with ScorexLogging with TimeToEpochSlotConverter {
-  val forgeMessageBuilder: ForgeMessageBuilder = new ForgeMessageBuilder(mainchainSynchronizer, companion, params, settings.websocket.allowNoConnectionInRegtest)
+  val forgeMessageBuilder: ForgeMessageBuilder = new ForgeMessageBuilder(mainchainSynchronizer, companion, applicationForger, params, settings.websocket.allowNoConnectionInRegtest)
   val timeoutDuration: FiniteDuration = settings.scorexSettings.restApi.timeout
   implicit val timeout: Timeout = Timeout(timeoutDuration)
 
@@ -165,20 +166,23 @@ object ForgerRef {
             viewHolderRef: ActorRef,
             mainchainSynchronizer: MainchainSynchronizer,
             companion: SidechainTransactionsCompanion,
-            params: NetworkParams): Props = Props(new Forger(settings, viewHolderRef, mainchainSynchronizer, companion, params))
+            applicationForger: ApplicationForger,
+            params: NetworkParams): Props = Props(new Forger(settings, viewHolderRef, mainchainSynchronizer, companion, applicationForger, params))
 
   def apply(settings: SidechainSettings,
             viewHolderRef: ActorRef,
             mainchainSynchronizer: MainchainSynchronizer,
             companion: SidechainTransactionsCompanion,
+            applicationForger: ApplicationForger,
             params: NetworkParams)
-           (implicit system: ActorSystem): ActorRef = system.actorOf(props(settings, viewHolderRef, mainchainSynchronizer, companion, params))
+           (implicit system: ActorSystem): ActorRef = system.actorOf(props(settings, viewHolderRef, mainchainSynchronizer, companion, applicationForger, params))
 
   def apply(name: String,
             settings: SidechainSettings,
             viewHolderRef: ActorRef,
             mainchainSynchronizer: MainchainSynchronizer,
             companion: SidechainTransactionsCompanion,
+            applicationForger: ApplicationForger,
             params: NetworkParams)
-           (implicit system: ActorSystem): ActorRef = system.actorOf(props(settings, viewHolderRef, mainchainSynchronizer, companion, params), name)
+           (implicit system: ActorSystem): ActorRef = system.actorOf(props(settings, viewHolderRef, mainchainSynchronizer, companion, applicationForger, params), name)
 }

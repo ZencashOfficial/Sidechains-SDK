@@ -16,7 +16,7 @@ import com.horizen.certificatesubmitter.CertificateSubmitterRef
 import com.horizen.companion._
 import com.horizen.consensus.ConsensusDataStorage
 import com.horizen.cryptolibprovider.CryptoLibProvider
-import com.horizen.forge.{ForgerRef, MainchainSynchronizer}
+import com.horizen.forge.{ApplicationForger, ForgerRef, MainchainSynchronizer}
 import com.horizen.params._
 import com.horizen.proof.ProofSerializer
 import com.horizen.proposition.{SchnorrProposition, SchnorrPropositionSerializer}
@@ -55,6 +55,7 @@ class SidechainApp @Inject()
    @Named("CustomTransactionSerializers") val customTransactionSerializers: JHashMap[JByte, TransactionSerializer[SidechainTypes#SCBT]],
    @Named("ApplicationWallet") val applicationWallet: ApplicationWallet,
    @Named("ApplicationState") val applicationState: ApplicationState,
+   @Named("ApplicationForger") val applicationForger: ApplicationForger,
    @Named("SecretStorage") val secretStorage: Storage,
    @Named("WalletBoxStorage") val walletBoxStorage: Storage,
    @Named("WalletTransactionStorage") val walletTransactionStorage: Storage,
@@ -243,7 +244,7 @@ class SidechainApp @Inject()
   // Init Forger with a proper web socket client
   val mainchainNodeChannel = new MainchainNodeChannelImpl(communicationClient, params)
   val mainchainSynchronizer = new MainchainSynchronizer(mainchainNodeChannel)
-  val sidechainBlockForgerActorRef: ActorRef = ForgerRef("Forger", sidechainSettings, nodeViewHolderRef,  mainchainSynchronizer, sidechainTransactionsCompanion, params)
+  val sidechainBlockForgerActorRef: ActorRef = ForgerRef("Forger", sidechainSettings, nodeViewHolderRef,  mainchainSynchronizer, sidechainTransactionsCompanion, applicationForger, params)
 
   // Init Transactions and Block actors for Api routes classes
   val sidechainTransactionActorRef: ActorRef = SidechainTransactionActorRef(nodeViewHolderRef)
