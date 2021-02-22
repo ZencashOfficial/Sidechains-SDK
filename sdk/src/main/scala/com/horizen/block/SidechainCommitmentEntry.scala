@@ -1,7 +1,10 @@
 package com.horizen.block
 
-import com.google.common.primitives.Bytes
-import com.horizen.utils.{BytesUtils, Utils}
+import com.horizen.cryptolibprovider.{FieldElementUtils, InMemoryOptimizedMerkleTreeUtils}
+import com.horizen.utils.BytesUtils
+
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
 class SidechainCommitmentEntry
 {
@@ -17,47 +20,49 @@ class SidechainCommitmentEntry
     withdrawalCertificateHash = Some(hash)
   }
 
-  def getTxsHash: Array[Byte] = {
-    BytesUtils.reverseBytes(
-      Utils.doubleSHA256Hash(
-        Bytes.concat(
-          BytesUtils.reverseBytes(forwardTransfersHash.getOrElse(SidechainCommitmentEntry.MAGIC_SC_STRING)),
-          BytesUtils.reverseBytes(backwardTransferRequestHash.getOrElse(SidechainCommitmentEntry.MAGIC_SC_STRING))
-        )
-      )
-    )
-  }
+  def getForwardTransfersHash: Option[Array[Byte]] = forwardTransfersHash
 
-  def getWCertHash: Array[Byte] = {
-    withdrawalCertificateHash.getOrElse(SidechainCommitmentEntry.MAGIC_SC_STRING)
-  }
+  def getBackwardTransferRequestHash: Option[Array[Byte]] = backwardTransferRequestHash
+
+  def getWCertHash: Option[Array[Byte]] = withdrawalCertificateHash
 
   def getSidechainCommitmentEntryHash(sidechainId: Array[Byte]): Array[Byte] = {
     SidechainCommitmentEntry.getSidechainCommitmentEntryHash(
-      sidechainId,
-      getTxsHash,
-      getWCertHash
+      getForwardTransfersHash,
+      getBackwardTransferRequestHash,
+      getWCertHash,
+      sidechainId
     )
   }
 }
 
 object SidechainCommitmentEntry
 {
-  private val MAGIC_SC_STRING = BytesUtils.fromHexString("bc99f1efa1a15584ced657631202ec3642eb89d4533c8a9cd58875146b867f4e")
 
-  private def getSidechainCommitmentEntryHash(sidechainId: Array[Byte], txsHash: Array[Byte], wcertHash: Array[Byte]): Array[Byte] = {
-    BytesUtils.reverseBytes(
-      Utils.doubleSHA256Hash(
-        Bytes.concat(
-          BytesUtils.reverseBytes(txsHash),
-          BytesUtils.reverseBytes(wcertHash),
-          BytesUtils.reverseBytes(sidechainId)
-        )
-      )
-    )
+  private def getSidechainCommitmentEntryHash(ftsHash: Option[Array[Byte]],
+                                              btrsHash: Option[Array[Byte]],
+                                              wcertHash: Option[Array[Byte]],
+                                              sidechainId: Array[Byte]): Array[Byte] = {
+    val singleSidechainComponents: ArrayBuffer[Array[Byte]] = ArrayBuffer()
+
+    // TODO: restore this solution, after the changes on MC side
+    /*ftsHash.foreach(singleSidechainComponents.append(_))
+    btrsHash.foreach(singleSidechainComponents.append(_))
+    wcertHash.foreach(singleSidechainComponents.append(_))*/
+    singleSidechainComponents.append(ftsHash.orNull)
+    singleSidechainComponents.append(btrsHash.orNull)
+    singleSidechainComponents.append(wcertHash.orNull)
+
+    val sidechainIdFE: Array[Byte] = new Array[Byte](FieldElementUtils.maximumFieldElementLength)
+    val sidechainIdLE: Array[Byte] = BytesUtils.reverseBytes(sidechainId)
+    System.arraycopy(sidechainIdLE, 0, sidechainIdFE, 0, sidechainIdLE.length)
+
+    singleSidechainComponents.append(sidechainIdFE)
+
+    InMemoryOptimizedMerkleTreeUtils.merkleTreeRootHash(singleSidechainComponents.asJava)
   }
 
   def getSidechainCommitmentEntryHash(proof: SidechainCommitmentEntryProof): Array[Byte] = {
-    getSidechainCommitmentEntryHash(proof.sidechainId, proof.txsHash, proof.wcertHash)
+    getSidechainCommitmentEntryHash(proof.ftsHash, proof.btrsHash, proof.wcertHash, proof.sidechainId)
   }
 }

@@ -55,7 +55,8 @@
     <dependency>
       <groupId>io.horizen</groupId>
       <artifactId>zendoo-sc-cryptolib</artifactId>
-      <version>0.3.0</version>
+      <!-- temporary version, self compiled windows_dependencies_fix built on top of updatable_poseidon-->
+      <version>0.4.19-SNAPSHOT</version>
       <scope>compile</scope>
     </dependency>
     <!-- https://mvnrepository.com/artifact/io.circe/circe-core -->
@@ -296,6 +297,7 @@
           <include>mctx_v-4_sc_creation</include>
           <include>sc_node_holder_fixter_settings.conf</include>
           <include>new_mc_blocks/mc_block_empty_sidechains</include>
+          <include>new_mc_blocks/mc_block_with_1_sidechain</include>
           <include>new_mc_blocks/mc_block_with_3_sidechains</include>
           <include>new_mc_blocks/mc_block_with_backward_transfer</include>
           <include>backward_transfer_certificate_empty</include>

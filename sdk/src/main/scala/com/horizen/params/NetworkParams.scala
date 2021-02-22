@@ -3,6 +3,7 @@ package com.horizen.params
 import java.math.BigInteger
 
 import com.horizen.proposition.SchnorrProposition
+import com.horizen.utils.BytesUtils
 import scorex.core.block.Block
 import scorex.util.{ModifierId, bytesToId}
 
@@ -24,9 +25,14 @@ trait NetworkParams {
   final def MaxActualTimespan: Int = (averagingWindowTimespan * (100 + nPowMaxAdjustDown)) / 100
   final def nMedianTimeSpan: Int = 11
 
+  final val mcBlockVersionScSupport: Int = 0x3
+  // Currently, if there is no Sidechains mentioned in the MC block,
+  // then tx commitment hash is a double SHA256 hash of zero Field element (98 bytes of zeros).
+  // Note: value hard-coded in a big-endian notation.
+  final val emptyScTransactionCommitment: Array[Byte] = BytesUtils.fromHexString("3a464e1e43410c7add1dd81c3f10486f41eb473bb43e8d64feca3c7f0c8028d3")
 
   // Sidechain params:
-  val zeroHashBytes: Array[Byte] = new Array[Byte](32)
+  final val zeroHashBytes: Array[Byte] = new Array[Byte](32)
   val sidechainId: Array[Byte]
   val sidechainGenesisBlockId: ModifierId
   val sidechainGenesisBlockParentId: ModifierId = bytesToId(new Array[Byte](32))

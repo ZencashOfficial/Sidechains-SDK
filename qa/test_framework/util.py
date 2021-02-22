@@ -489,7 +489,9 @@ def initialize_new_sidechain_in_mainchain(mainchain_node, withdrawal_epoch_lengt
     print "Id of the sidechain transaction creation: {0}".format(transaction_id)
     print "Sidechain created with Id: {0}".format(sidechain_id)
 
-    mainchain_node.generate(1)
+    block_id = mainchain_node.generate(1)[0]
+    block_hex = mainchain_node.getblock(block_id, False)
+    
     return [mainchain_node.getscgenesisinfo(sidechain_id), mainchain_node.getblockcount(), sidechain_id]
 
 

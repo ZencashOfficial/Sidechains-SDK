@@ -1,6 +1,11 @@
 package com.horizen.block
 
-import com.horizen.utils.{ByteArrayWrapper, BytesUtils, MerklePath, MerkleTree}
+import com.horizen.box.Box
+import com.horizen.cryptolibprovider.{FieldElementUtils, InMemoryOptimizedMerkleTreeUtils}
+import com.horizen.merkletreenative.{InMemoryOptimizedMerkleTree, MerklePath}
+import com.horizen.proposition.Proposition
+import com.horizen.transaction.mainchain.SidechainRelatedMainchainOutput
+import com.horizen.utils.{ByteArrayWrapper, BytesUtils}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -9,23 +14,30 @@ class SidechainsCommitmentTree
 {
   val sidechainsHashMap: mutable.Map[ByteArrayWrapper, SidechainCommitmentEntry] = new mutable.HashMap[ByteArrayWrapper, SidechainCommitmentEntry]()
 
-  def addForwardTransferMerkleRootHash(sidechainId: ByteArrayWrapper, rootHash: Array[Byte]): Unit = {
+  def addForwardTransfers(sidechainId: ByteArrayWrapper, ftOutputs: Seq[SidechainRelatedMainchainOutput[_ <: Box[_ <: Proposition]]]): Unit = {
+    val forwardTransfersRootHash = InMemoryOptimizedMerkleTreeUtils.merkleTreeRootHash(ftOutputs.map(_.fieldElementBytes()).asJava)
     sidechainsHashMap.get(sidechainId) match {
-      case Some(entry) => entry.setForwardTransfersHash(rootHash)
+      case Some(entry) =>
+        entry.setForwardTransfersHash(forwardTransfersRootHash)
       case None =>
         val entry = new SidechainCommitmentEntry()
-        entry.setForwardTransfersHash(rootHash)
+        entry.setForwardTransfersHash(forwardTransfersRootHash)
         sidechainsHashMap.put(sidechainId, entry)
     }
   }
 
   def addCertificate(certificate: WithdrawalEpochCertificate): Unit = {
     val sidechainId = new ByteArrayWrapper(certificate.sidechainId)
+
+    val fieldElement: Array[Byte] = new Array[Byte](FieldElementUtils.maximumFieldElementLength)
+    val hashLE: Array[Byte] = BytesUtils.reverseBytes(certificate.hash)
+    System.arraycopy(hashLE, 0, fieldElement, 0, hashLE.length)
+
     sidechainsHashMap.get(sidechainId) match {
-      case Some(entry) => entry.setWithdrawalCertificateHash(certificate.hash)
+      case Some(entry) => entry.setWithdrawalCertificateHash(fieldElement)
       case None =>
         val entry = new SidechainCommitmentEntry()
-        entry.setWithdrawalCertificateHash(certificate.hash)
+        entry.setWithdrawalCertificateHash(fieldElement)
         sidechainsHashMap.put(sidechainId, entry)
     }
   }
@@ -37,22 +49,29 @@ class SidechainsCommitmentTree
     }
   }
 
-  private[block] def getMerkleTree: MerkleTree = {
-    val merkleTreeLeaves = getOrderedSidechainIds().map(id => getSidechainCommitmentEntryHash(id))
-    MerkleTree.createMerkleTree(merkleTreeLeaves.asJava)
+  private def getMerkleTreeLeaves(): Seq[Array[Byte]] = {
+    getOrderedSidechainIds().map(id => getSidechainCommitmentEntryHash(id))
   }
 
-  def getMerkleRoot: Array[Byte] = {
-    getMerkleTree.rootHash()
+  private[block] def getMerkleTree(): InMemoryOptimizedMerkleTree = {
+    InMemoryOptimizedMerkleTreeUtils.merkleTree(getMerkleTreeLeaves().asJava)
+  }
+
+  def getMerkleRoot(): Array[Byte] = {
+    InMemoryOptimizedMerkleTreeUtils.merkleTreeRootHash(getMerkleTreeLeaves().asJava)
   }
 
   def getSidechainCommitmentEntryMerklePath(sidechainId: ByteArrayWrapper): Option[MerklePath] = {
     sidechainsHashMap.get(sidechainId) match {
       case Some(entry) =>
-        val merkleTree = getMerkleTree
+        val merkleTree: InMemoryOptimizedMerkleTree = getMerkleTree()
         val entryHash = new ByteArrayWrapper(entry.getSidechainCommitmentEntryHash(sidechainId.data))
-        val leafIndex = merkleTree.leaves().asScala.map(l => new ByteArrayWrapper(l)).indexOf(entryHash)
-        Some(merkleTree.getMerklePathForLeaf(leafIndex))
+        val leafIndex = getMerkleTreeLeaves().view.map(l => new ByteArrayWrapper(l)).indexOf(entryHash)
+        val merklePath = Some(merkleTree.getMerklePath(leafIndex))
+
+        merkleTree.freeInMemoryOptimizedMerkleTree()
+
+        merklePath
       case None => None
     }
   }
@@ -82,9 +101,15 @@ class SidechainsCommitmentTree
   }
 
   private def getSidechainCommitmentEntryProof(sidechainId: Array[Byte], leafIndex: Int): SidechainCommitmentEntryProof = {
-    val merkleTree = getMerkleTree
+    val merkleTree: InMemoryOptimizedMerkleTree = getMerkleTree()
     val entry = sidechainsHashMap(new ByteArrayWrapper(sidechainId))
-    SidechainCommitmentEntryProof(sidechainId, entry.getTxsHash, entry.getWCertHash, merkleTree.getMerklePathForLeaf(leafIndex))
+    SidechainCommitmentEntryProof(
+      sidechainId,
+      entry.getForwardTransfersHash,
+      entry.getBackwardTransferRequestHash,
+      entry.getWCertHash,
+      merkleTree.getMerklePath(leafIndex)
+    )
   }
 
   // Sidechain ids are represented in a little-endian and ordered lexicographically same as in the MC.

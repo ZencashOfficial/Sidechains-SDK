@@ -5,13 +5,15 @@ import java.util.Arrays
 
 import com.fasterxml.jackson.annotation.{JsonIgnoreProperties, JsonView}
 import com.horizen.box.Box
+import com.horizen.cryptolibprovider.InMemoryOptimizedMerkleTreeUtils
+import com.horizen.merkletreenative.InMemoryOptimizedMerkleTree
 import com.horizen.params.NetworkParams
 import com.horizen.proposition.Proposition
 import com.horizen.transaction.mainchain.{ForwardTransfer, SidechainCreation, SidechainRelatedMainchainOutput}
 import com.horizen.serialization.Views
 import scorex.core.serialization.BytesSerializable
 import com.horizen.transaction.MC2SCAggregatedTransaction
-import com.horizen.utils.{ByteArrayWrapper, BytesUtils, MerkleTree, VarInt}
+import com.horizen.utils.{ByteArrayWrapper, BytesUtils, MerkleTree, Utils, VarInt}
 import scorex.core.serialization.ScorexSerializer
 import scorex.util.serialization.{Reader, Writer}
 import com.horizen.validation.{InconsistentMainchainBlockReferenceDataException, InvalidMainchainDataException}
@@ -53,8 +55,9 @@ case class MainchainBlockReference(
     if(!data.headerHash.sameElements(header.hash))
       throw new InvalidMainchainDataException("MainchainBlockReferenceData header hash and MainchainHeader hash are different.")
 
-    if (util.Arrays.equals(header.hashScTxsCommitment, params.zeroHashBytes)) {
-      // If there is not SC related outputs in MC block, then proofs, AggTx and Certificate expected to be not defined.
+    // Check that MC block version is not a sidechains support fork version or that Sc Tx Commitment is "null"
+    // then there are no SC related outputs in the MC block -> so NO proofs, AggTx and Certificate.
+    if (header.version != params.mcBlockVersionScSupport || util.Arrays.equals(header.hashScTxsCommitment, params.emptyScTransactionCommitment)) {
       if (data.mProof.isDefined ||
           data.proofOfNoData._1.isDefined ||
           data.proofOfNoData._2.isDefined ||
@@ -75,23 +78,19 @@ case class MainchainBlockReference(
         if (data.proofOfNoData._1.isDefined || data.proofOfNoData._2.isDefined)
           throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} is inconsistent to MainchainHeader")
 
-        val sidechainHashMap = new SidechainsCommitmentTree()
+        val sidechainsCommitmentTree = new SidechainsCommitmentTree()
 
         if (data.sidechainRelatedAggregatedTransaction.isDefined) {
-          val mc2scTransactionsOutputsMerkleTree = MerkleTree.createMerkleTree(
-            data.sidechainRelatedAggregatedTransaction.get.mc2scTransactionsOutputs().asScala.map(_.hash()).asJava)
-          if(mc2scTransactionsOutputsMerkleTree.isMutated)
-            throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} AggTx outputs leads to mutated MerkleTree.")
-
-          sidechainHashMap.addForwardTransferMerkleRootHash(sidechainId, mc2scTransactionsOutputsMerkleTree.rootHash())
+          sidechainsCommitmentTree.addForwardTransfers(sidechainId, data.sidechainRelatedAggregatedTransaction.get.mc2scTransactionsOutputs().asScala)
         }
 
         if (data.withdrawalEpochCertificate.isDefined)
-          sidechainHashMap.addCertificate(data.withdrawalEpochCertificate.get)
+          sidechainsCommitmentTree.addCertificate(data.withdrawalEpochCertificate.get)
 
-        val sidechainHash = sidechainHashMap.getSidechainCommitmentEntryHash(sidechainId)
+        val sidechainHash = sidechainsCommitmentTree.getSidechainCommitmentEntryHash(sidechainId)
 
-        if (!util.Arrays.equals(header.hashScTxsCommitment, data.mProof.get.apply(sidechainHash)))
+        // TODO: hashScTxsCommitment is actually a sha hash of poseidon hash result. But we need to pass poseidon one.
+        if(!InMemoryOptimizedMerkleTreeUtils.verifyMerklePath(data.mProof.get, sidechainHash, header.hashScTxsCommitment))
           throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} is inconsistent to MainchainHeader hashScTxsCommitment")
 
         if (data.sidechainRelatedAggregatedTransaction.isDefined && !data.sidechainRelatedAggregatedTransaction.get.semanticValidity())
@@ -114,9 +113,10 @@ case class MainchainBlockReference(
         if (data.proofOfNoData._1.isEmpty && !data.proofOfNoData._2.get.merklePath.isLeftmost)
           throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} right neighbour expected to be the first leaf in ScTxsCommitment merkle tree")
 
+
         // In case if only left neighbour is defined, it must be the rightmost leaf in the sidechains merkle tree.
         if (data.proofOfNoData._2.isEmpty &&
-            !data.proofOfNoData._1.get.merklePath.isRightmost(SidechainCommitmentEntry.getSidechainCommitmentEntryHash(data.proofOfNoData._1.get)))
+            !data.proofOfNoData._1.get.merklePath.isNonEmptyRightmost)
           throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} left neighbour expected to be the last leaf in ScTxsCommitment merkle tree")
 
         data.proofOfNoData._1 match {
@@ -124,8 +124,8 @@ case class MainchainBlockReference(
             // Compare in little-endian like in MC
             if (new ByteArrayWrapper(BytesUtils.reverseBytes(leftNeighbourProof.sidechainId)) >= new ByteArrayWrapper(BytesUtils.reverseBytes(sidechainId.data)))
               throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} left neighbour sidechain id is after current sidechain id")
-            val merkleRoot = leftNeighbourProof.merklePath.apply(SidechainCommitmentEntry.getSidechainCommitmentEntryHash(leftNeighbourProof))
-            if (!util.Arrays.equals(header.hashScTxsCommitment, merkleRoot))
+            // TODO: hashScTxsCommitment is sha not poseidon
+            if(!InMemoryOptimizedMerkleTreeUtils.verifyMerklePath(leftNeighbourProof.merklePath, SidechainCommitmentEntry.getSidechainCommitmentEntryHash(leftNeighbourProof), header.hashScTxsCommitment))
               throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} left neighbour proof is inconsistent to MainchainHeader hashScTxsCommitment")
           case None =>
         }
@@ -135,8 +135,8 @@ case class MainchainBlockReference(
             // Compare in little-endian like in MC
             if (new ByteArrayWrapper(BytesUtils.reverseBytes(rightNeighbourProof.sidechainId)) <= new ByteArrayWrapper(BytesUtils.reverseBytes(sidechainId.data)))
               throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} right neighbour sidechain id is before current sidechain id")
-            val merkleRoot = rightNeighbourProof.merklePath.apply(SidechainCommitmentEntry.getSidechainCommitmentEntryHash(rightNeighbourProof))
-            if (!util.Arrays.equals(header.hashScTxsCommitment, merkleRoot))
+            // TODO: hashScTxsCommitment is sha not poseidon
+            if(!InMemoryOptimizedMerkleTreeUtils.verifyMerklePath(rightNeighbourProof.merklePath, SidechainCommitmentEntry.getSidechainCommitmentEntryHash(rightNeighbourProof), header.hashScTxsCommitment))
               throw new InconsistentMainchainBlockReferenceDataException(s"MainchainBlockReferenceData ${header.hashHex} right neighbour proof is inconsistent to MainchainHeader hashScTxsCommitment")
           case None =>
         }
@@ -150,7 +150,7 @@ object MainchainBlockReference extends ScorexLogging {
   val MAX_MAINCHAIN_BLOCK_SIZE: Int = 2048 * 1024 //2048K
   val SC_CERT_BLOCK_VERSION = 3
 
-  def create(mainchainBlockBytes: Array[Byte], params: NetworkParams): Try[MainchainBlockReference] = {
+  def create(mainchainBlockBytes: Array[Byte], params: NetworkParams): Try[MainchainBlockReference] = Try {
     require(mainchainBlockBytes.length < MAX_MAINCHAIN_BLOCK_SIZE)
     require(params.sidechainId.length == 32)
 
@@ -161,26 +161,25 @@ object MainchainBlockReference extends ScorexLogging {
 
         val sidechainId = new ByteArrayWrapper(params.sidechainId)
 
-        val sidechainHashMap = new SidechainsCommitmentTree()
+        val sidechainsCommitmentTree = new SidechainsCommitmentTree()
 
         for (tx <- mainchainTxs)
           scIds = scIds ++ tx.getRelatedSidechains
 
         var mc2scTransaction: Option[MC2SCAggregatedTransaction] = None
         for (id <- scIds) {
-          var sidechainRelatedTransactionsOutputs: java.util.ArrayList[SidechainRelatedMainchainOutput[_ <: Box[_ <: Proposition]]] = new java.util.ArrayList()
+          val sidechainRelatedTransactionsOutputs: java.util.ArrayList[SidechainRelatedMainchainOutput[_ <: Box[_ <: Proposition]]] = new java.util.ArrayList()
           for (tx <- mainchainTxs) {
             sidechainRelatedTransactionsOutputs.addAll(getSidechainRelatedTransactionsOutputs(tx, id).asJava)
           }
-          val merkleTree = MerkleTree.createMerkleTree(sidechainRelatedTransactionsOutputs.asScala.map(_.hash()).asJava)
-          sidechainHashMap.addForwardTransferMerkleRootHash(id, merkleTree.rootHash())
+          sidechainsCommitmentTree.addForwardTransfers(id, sidechainRelatedTransactionsOutputs.asScala)
           if(id == sidechainId)
             mc2scTransaction = Some(new MC2SCAggregatedTransaction(sidechainRelatedTransactionsOutputs, header.time))
         }
 
         scIds = scIds ++ certificates.map(c => new ByteArrayWrapper(c.sidechainId))
 
-        certificates.foreach(c => sidechainHashMap.addCertificate(c))
+        certificates.foreach(c => sidechainsCommitmentTree.addCertificate(c))
 
         val certificate: Option[WithdrawalEpochCertificate] = certificates.find(c => util.Arrays.equals(c.sidechainId, sidechainId.data))
 
@@ -188,9 +187,9 @@ object MainchainBlockReference extends ScorexLogging {
           if (scIds.isEmpty) {
             MainchainBlockReferenceData(header.hash, None, None, (None, None), None)
           } else if (scIds.contains(sidechainId)) {
-            MainchainBlockReferenceData(header.hash, mc2scTransaction, sidechainHashMap.getSidechainCommitmentEntryMerklePath(sidechainId), (None, None), certificate)
+            MainchainBlockReferenceData(header.hash, mc2scTransaction, sidechainsCommitmentTree.getSidechainCommitmentEntryMerklePath(sidechainId), (None, None), certificate)
           } else {
-            MainchainBlockReferenceData(header.hash, mc2scTransaction, None, sidechainHashMap.getNeighbourSidechainCommitmentEntryProofs(sidechainId), certificate)
+            MainchainBlockReferenceData(header.hash, mc2scTransaction, None, sidechainsCommitmentTree.getNeighbourSidechainCommitmentEntryProofs(sidechainId), certificate)
           }
 
         Success(MainchainBlockReference(header, data))
@@ -199,11 +198,12 @@ object MainchainBlockReference extends ScorexLogging {
         Failure(e)
     }
 
-    if(tryBlock.isFailure)
-      tryBlock
-    else {
-      tryBlock.get.semanticValidity(params).get
-      tryBlock
+    tryBlock match {
+      case Success(block) =>
+        block.semanticValidity(params).get
+        block
+      case Failure(exception) =>
+        throw exception
     }
   }
 

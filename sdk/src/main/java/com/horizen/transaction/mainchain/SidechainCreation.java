@@ -6,6 +6,8 @@ import com.horizen.block.MainchainTxSidechainCreationCrosschainOutput;
 import com.horizen.block.MainchainTxSidechainCreationCrosschainOutputData;
 import com.horizen.box.ForgerBox;
 import com.horizen.box.data.ForgerBoxData;
+import com.horizen.cryptolibprovider.FieldElementUtils;
+import com.horizen.librustsidechains.FieldElement;
 import com.horizen.proposition.PublicKey25519Proposition;
 import com.horizen.utils.BytesUtils;
 import com.horizen.utils.Utils;
@@ -25,6 +27,8 @@ public final class SidechainCreation implements SidechainRelatedMainchainOutput<
         this.containingTxHash = containingTxHash;
         this.index = index;
     }
+
+    // TODO: this can be removed later, so `fieldElementBytes` is used.
     @Override
     public byte[] hash() {
         return BytesUtils.reverseBytes(Utils.doubleSHA256Hash(Bytes.concat(
@@ -32,6 +36,19 @@ public final class SidechainCreation implements SidechainRelatedMainchainOutput<
                 BytesUtils.reverseBytes(containingTxHash),
                 BytesUtils.reverseBytes(Ints.toByteArray(index))
         )));
+    }
+
+    @Override
+    public byte[] fieldElementBytes() {
+        byte[] fieldElement = new byte[FieldElement.FIELD_ELEMENT_LENGTH];
+        byte[] data = Bytes.concat(
+                BytesUtils.reverseBytes(output.hash()),
+                BytesUtils.reverseBytes(containingTxHash),
+                BytesUtils.reverseBytes(Ints.toByteArray(index))
+        );
+        // Copy data and leave unused bytes equal to 0.
+        System.arraycopy(data, 0, fieldElement, 0, data.length);
+        return fieldElement;
     }
 
     @Override

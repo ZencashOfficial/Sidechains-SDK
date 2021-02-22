@@ -103,6 +103,7 @@ public final class MC2SCAggregatedTransaction
         throw new UnsupportedOperationException("MC2SCAggregatedTransaction can not be signed.");
     }
 
+    // TODO: instead of using com.horizen.utils.MerkleTree we should use sc-cryptolib MerkleTree and `output.fieldElementBytes` method
     @JsonProperty("mc2scTransactionsMerkleRootHash")
     public synchronized byte[] mc2scMerkleRootHash() {
         if(mc2scTransactionsMerkleRootHash == null) {

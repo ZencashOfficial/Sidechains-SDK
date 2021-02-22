@@ -3,25 +3,24 @@ package com.horizen.serialization
 import com.fasterxml.jackson.core.JsonGenerator
 import com.fasterxml.jackson.databind
 import com.fasterxml.jackson.databind.SerializerProvider
-import com.horizen.utils.{BytesUtils, MerklePath}
-
-import scala.collection.JavaConverters._
+import com.horizen.merkletreenative.MerklePath
+import com.horizen.utils.BytesUtils
 
 class JsonMerklePathSerializer extends databind.JsonSerializer[MerklePath] {
 
-  override def serialize(t: MerklePath, jsonGenerator: JsonGenerator, serializerProvider: SerializerProvider): Unit = {
-    var listOfPair : Iterable[Pair] = t.merklePathList.asScala.map(k => Pair(k.getKey.toString, BytesUtils.toHexString(k.getValue)))
-    jsonGenerator.writeObject(listOfPair)
+  override def serialize(merklePath: MerklePath, jsonGenerator: JsonGenerator, serializerProvider: SerializerProvider): Unit = {
+    jsonGenerator.writeString(BytesUtils.toHexString(merklePath.serialize()))
   }
 }
 class JsonMerklePathOptionSerializer extends databind.JsonSerializer[Option[MerklePath]] {
 
-  override def serialize(t: Option[MerklePath], jsonGenerator: JsonGenerator, serializerProvider: SerializerProvider): Unit = {
-    if(t.isDefined){
-      new JsonMerklePathSerializer().serialize(t.get, jsonGenerator, serializerProvider)
-    }else{
-      jsonGenerator.writeStartArray()
-      jsonGenerator.writeEndArray()
+  override def serialize(merklePathOption: Option[MerklePath], jsonGenerator: JsonGenerator, serializerProvider: SerializerProvider): Unit = {
+    merklePathOption match {
+      case Some(merklePath) =>
+        new JsonMerklePathSerializer().serialize(merklePath, jsonGenerator, serializerProvider)
+      case None =>
+        jsonGenerator.writeStartArray()
+        jsonGenerator.writeEndArray()
     }
   }
 }

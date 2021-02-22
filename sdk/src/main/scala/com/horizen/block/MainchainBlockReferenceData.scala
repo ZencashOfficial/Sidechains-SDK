@@ -2,9 +2,9 @@ package com.horizen.block
 
 import com.fasterxml.jackson.annotation.{JsonIgnoreProperties, JsonView}
 import com.fasterxml.jackson.databind.annotation.JsonSerialize
+import com.horizen.merkletreenative.MerklePath
 import com.horizen.serialization.{JsonMerklePathOptionSerializer, Views}
 import com.horizen.transaction.{MC2SCAggregatedTransaction, MC2SCAggregatedTransactionSerializer}
-import com.horizen.utils.MerklePath
 import scorex.core.serialization.{BytesSerializable, ScorexSerializer}
 import scorex.util.serialization.{Reader, Writer}
 
@@ -14,7 +14,7 @@ case class MainchainBlockReferenceData(
                                         headerHash: Array[Byte],
                                         sidechainRelatedAggregatedTransaction: Option[MC2SCAggregatedTransaction],
                                         @JsonSerialize(using = classOf[JsonMerklePathOptionSerializer])
-                                        mProof: Option[MerklePath],
+                                        mProof: Option[MerklePath], // TODO: store as bytes
                                         proofOfNoData: (Option[SidechainCommitmentEntryProof], Option[SidechainCommitmentEntryProof]),
                                         withdrawalEpochCertificate: Option[WithdrawalEpochCertificate]) extends BytesSerializable {
   override type M = MainchainBlockReferenceData
@@ -48,8 +48,8 @@ object MainchainBlockReferenceDataSerializer extends ScorexSerializer[MainchainB
 
     obj.mProof match {
       case Some(mp) =>
-        w.putInt(mp.bytes().length)
-        w.putBytes(mp.bytes())
+        w.putInt(mp.serialize().length)
+        w.putBytes(mp.serialize())
       case None =>
         w.putInt(0)
     }
@@ -98,7 +98,7 @@ object MainchainBlockReferenceDataSerializer extends ScorexSerializer[MainchainB
 
     val mproof: Option[MerklePath] = {
       if (mproofSize > 0)
-        Some(MerklePath.parseBytes(r.getBytes(mproofSize)))
+        Some(MerklePath.deserialize(r.getBytes(mproofSize)))
       else
         None
     }

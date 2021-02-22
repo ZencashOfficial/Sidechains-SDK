@@ -14,11 +14,12 @@ Configuration: 1 MC node
 
 Test:
     - generate MC Block without sidechains
-    - generate MC Block with 3 sidechains mentioned
+    - generate MC Block with 3 sidechains mentioned (FTs)
+    - generate MC Block with 1 sidechain mentioned (FT)
 """
 
 
-class McTxsData(SidechainTestFramework):
+class McBlocksData(SidechainTestFramework):
     def setup_nodes(self):
         return start_nodes(1, self.options.tmpdir)
 
@@ -44,9 +45,9 @@ class McTxsData(SidechainTestFramework):
         print("MC Block without SC data: \nHash = {0}\nHex = {1}\nJson = {2}\n"
               .format(str(block_id), str(block_hex), str(block_json)))
 
+        sc_creation_info = SCCreationInfo(mc_node, 100, 1000)
 
         # Generate MC block with 3 sidechains mentioned.
-        sc_creation_info = SCCreationInfo(mc_node, 100, 1000)
         boot_info = create_sidechain(sc_creation_info)
         sidechain_id_1 = str(boot_info.sidechain_id)
 
@@ -71,6 +72,14 @@ class McTxsData(SidechainTestFramework):
         print("MC Block with multiple SCs mentioned: \nHash = {0}\nHex = {1}\nJson = {2}\nSidechains = {3}\n"
               .format(str(block_id), str(block_hex), str(block_json), sorted_sidechain_ids))
 
+        # Generate MC Block with single sidechain (FT to the first SC id)
+        mc_node.sc_send(sc_address, 1, sidechain_id_1)  # 1 Zen
+        # Generate block
+        block_id = mc_node.generate(1)[0]
+        block_hex = mc_node.getblock(block_id, False)
+        block_json = mc_node.getblock(block_id)
+        print("MC Block with single SC mentioned: \nHash = {0}\nHex = {1}\nJson = {2}\nSidechain = {3}\n"
+              .format(str(block_id), str(block_hex), str(block_json), str(sidechain_id_1)))
 
 if __name__ == "__main__":
-    McTxsData().main()
+    McBlocksData().main()

@@ -9,7 +9,7 @@ public class FieldElementUtils {
         return FieldElement.FIELD_ELEMENT_LENGTH;
     }
 
-    static FieldElement messageToFieldElement(byte[] message) {
+    public static FieldElement messageToFieldElement(byte[] message) {
         if (message.length > maximumFieldElementLength()) {
             throw new IllegalArgumentException("Message length is exceed allowed message len. Message len " +
                     message.length + " but it shall be less than " + maximumFieldElementLength());
