@@ -254,6 +254,10 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
 
   override def modifierById(blockId: ModifierId): Option[SidechainBlock] = storage.blockById(blockId)
 
+  def blockIdByHeight(height: Int): Option[String] = {
+    storage.activeChainBlockId(height)
+  }
+
   override def isSemanticallyValid(blockId: ModifierId): ModifierSemanticValidity = {
     storage.semanticValidity(blockId)
   }
@@ -393,6 +397,14 @@ class SidechainHistory private (val storage: SidechainHistoryStorage,
       case None => JOptional.empty()
     }
   }
+
+  override def getBlockHeightById(id: String): JOptional[Integer] = {
+    storage.heightOf(ModifierId(id)) match {
+      case Some(height) => JOptional.of[Integer](height)
+      case None => JOptional.empty()
+    }
+  }
+
 
   override def getCurrentHeight: Int = {
     height

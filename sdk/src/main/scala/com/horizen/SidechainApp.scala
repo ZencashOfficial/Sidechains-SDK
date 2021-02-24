@@ -20,13 +20,12 @@ import com.horizen.forge.{ForgerRef, MainchainSynchronizer}
 import com.horizen.params._
 import com.horizen.proof.ProofSerializer
 import com.horizen.proposition.{SchnorrProposition, SchnorrPropositionSerializer}
-import com.horizen.secret.{PrivateKey25519Serializer, SchnorrSecretSerializer, SecretSerializer}
+import com.horizen.secret.SecretSerializer
 import com.horizen.state.ApplicationState
 import com.horizen.storage._
 import com.horizen.transaction._
 import com.horizen.utils.{BytesUtils, Pair}
 import com.horizen.wallet.ApplicationWallet
-import com.horizen.websocket._
 import scorex.core.api.http.ApiRoute
 import scorex.core.app.Application
 import scorex.core.network.message.MessageSpec
@@ -42,6 +41,8 @@ import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.io.Source
 import com.horizen.network.SidechainNodeViewSynchronizer
+import com.horizen.websocket.client.{DefaultWebSocketReconnectionHandler, MainchainNodeChannelImpl, WebSocketChannel, WebSocketCommunicationClient, WebSocketConnector, WebSocketConnectorImpl, WebSocketReconnectionHandler}
+import com.horizen.websocket.server.WebSocketServerRef
 
 import scala.util.Try
 
@@ -224,7 +225,7 @@ class SidechainApp @Inject()
   val webSocketReconnectionHandler: WebSocketReconnectionHandler = new DefaultWebSocketReconnectionHandler(sidechainSettings.websocket)
 
   // Create the web socket connector and configure it
-  val webSocketConnector : WebSocketConnector = new WebSocketConnectorImpl(
+  val webSocketConnector : WebSocketConnector with WebSocketChannel = new WebSocketConnectorImpl(
     sidechainSettings.websocket.address,
     sidechainSettings.websocket.connectionTimeout,
     communicationClient,
@@ -251,6 +252,11 @@ class SidechainApp @Inject()
 
   if (sidechainSettings.withdrawalEpochCertificateSettings.submitterIsEnabled) {
     val certificateSubmitter: ActorRef = CertificateSubmitterRef(sidechainSettings, nodeViewHolderRef, params, mainchainNodeChannel)
+  }
+
+  //Websocket server for the Explorer
+  if(sidechainSettings.websocket.wsServer) {
+    val webSocketServerActor: ActorRef = WebSocketServerRef(nodeViewHolderRef,sidechainSettings.websocket.wsServerPort)
   }
 
   // Init API

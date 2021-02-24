@@ -1,17 +1,16 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
 import com.horizen.mainchain.api.{BackwardTransferEntry, SendCertificateRequest}
 import com.horizen.params.MainNetParams
 import com.horizen.utils.BytesUtils
-import org.scalatest.junit.JUnitSuite
-import org.junit.Test
 import org.junit.Assert._
+import org.junit.Test
 import org.mockito.{ArgumentMatchers, Mockito}
+import org.scalatest.junit.JUnitSuite
 import org.scalatest.mockito.MockitoSugar
 
-import scala.concurrent.duration._
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.Promise
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.io.Source
 import scala.util.Success
 

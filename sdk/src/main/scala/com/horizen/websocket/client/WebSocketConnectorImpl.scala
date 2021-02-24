@@ -1,8 +1,8 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
 import java.net.URI
 
-import javax.websocket.{ClientEndpoint, CloseReason, MessageHandler, SendHandler, SendResult, Session}
+import javax.websocket._
 import org.glassfish.tyrus.client.{ClientManager, ClientProperties}
 import scorex.util.ScorexLogging
 

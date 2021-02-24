@@ -1,8 +1,8 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
-import scala.util.Try
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Try
 
 trait EventPayload
 

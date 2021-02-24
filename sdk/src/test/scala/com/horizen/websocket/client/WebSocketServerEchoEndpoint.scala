@@ -1,8 +1,6 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
-
-import javax.websocket.OnMessage
-import javax.websocket.Session
+import javax.websocket.{OnMessage, Session}
 import javax.websocket.server.ServerEndpoint
 
 @ServerEndpoint("/")

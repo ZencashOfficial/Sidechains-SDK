@@ -1,4 +1,4 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -7,10 +7,9 @@ import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import scorex.util.ScorexLogging
 
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
-import scala.concurrent.duration._
 
 class WebSocketCommunicationClient extends WebSocketChannelCommunicationClient with WebSocketMessageHandler with ScorexLogging {
 

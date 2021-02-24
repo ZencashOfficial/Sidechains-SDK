@@ -1,4 +1,4 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
@@ -28,7 +28,7 @@ trait WebSocketReconnectionHandler {
   def onConnectionSuccess(): Unit
 }
 
-trait WebSocketConnector extends WebSocketChannel {
+trait  WebSocketConnector{
   def isStarted(): Boolean
 
   def start(): Try[Unit]

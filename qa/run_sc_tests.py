@@ -12,6 +12,7 @@ from mc_sc_nodes_alive import MCSCNodesAlive
 from sc_backward_transfer import SCBackwardTransfer
 from sc_bootstrap import SCBootstrap
 from sc_forward_transfer import SCForwardTransfer
+from websocket_server import SCWsServer
 
 def run_test(test):
     try:
@@ -52,6 +53,9 @@ def run_tests(log_file):
 
     result = run_test(MCSCForgingDelegation())
     assert_equal(0, result, "mc_sc_forging_delegation test failed!")
+
+    result = run_test(SCWsServer())
+    assert_equal(0, result, "websocket_server test failed!")
 
 if __name__ == "__main__":
     log_file = open("sc_test.log", "w")

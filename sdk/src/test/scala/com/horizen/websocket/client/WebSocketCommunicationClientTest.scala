@@ -1,12 +1,12 @@
-package com.horizen.websocket
+package com.horizen.websocket.client
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.junit.Assert._
 import org.junit.{Before, Test}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.junit.JUnitSuite
 import org.scalatest.mockito.MockitoSugar
-import org.junit.Assert._
-import org.mockito.{ArgumentMatchers, Mockito}
 
 import scala.concurrent.{Await, Future, TimeoutException}
 import scala.util.{Failure, Success, Try}

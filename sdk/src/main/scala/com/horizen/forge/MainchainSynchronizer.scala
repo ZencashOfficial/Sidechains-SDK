@@ -4,8 +4,8 @@ import com.horizen.SidechainHistory
 import com.horizen.block.MainchainBlockReference
 import com.horizen.chain.{MainchainHeaderHash, byteArrayToMainchainHeaderHash}
 import com.horizen.utils.BytesUtils
-import com.horizen.websocket.MainchainNodeChannel
 import com.horizen.utils._
+import com.horizen.websocket.client.MainchainNodeChannel
 
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}

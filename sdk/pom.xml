@@ -177,14 +177,14 @@
       <groupId>org.glassfish.tyrus</groupId>
       <artifactId>tyrus-container-grizzly-server</artifactId>
       <version>1.15</version>
-      <scope>test</scope>
+      <scope>compile</scope>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.glassfish.tyrus/tyrus-server -->
     <dependency>
       <groupId>org.glassfish.tyrus</groupId>
       <artifactId>tyrus-server</artifactId>
       <version>1.15</version>
-      <scope>test</scope>
+      <scope>compile</scope>
     </dependency>
     <!-- https://mvnrepository.com/artifact/org.iq80.leveldb/leveldb-project -->
     <dependency>
