@@ -63,7 +63,7 @@ class SigProofTest {
   }
 
   //Test will take around 2 minutes, enable for sanity checking of ThresholdSignatureCircuit
-  //@Ignore
+  @Ignore
   @Test
   def simpleCheck(): Unit = {
     val keyPairsLen = 7

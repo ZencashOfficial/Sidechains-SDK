@@ -39,7 +39,7 @@ import scorex.util.ScorexLogging
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
 import scala.collection.mutable
-import scala.io.Source
+import scala.io.{Codec, Source}
 import com.horizen.network.SidechainNodeViewSynchronizer
 
 import scala.util.Try
@@ -298,7 +298,7 @@ class SidechainApp @Inject()
     .union(applicationApiRoutes)
     .union(coreApiRoutes)
 
-  override val swaggerConfig: String = Source.fromResource("api/sidechainApi.yaml").getLines.mkString("\n")
+  override val swaggerConfig: String = Source.fromResource("api/sidechainApi.yaml")(Codec.UTF8).getLines.mkString("\n")
 
   override def stopAll(): Unit = {
     super.stopAll()
