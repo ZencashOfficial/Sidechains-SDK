@@ -47,7 +47,11 @@ class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
     val parentBlockId: ModifierId = branchPointInfo.branchPointId
     val parentBlockInfo = nodeView.history.blockInfoById(parentBlockId)
 
-    checkNextEpochAndSlot(parentBlockInfo.timestamp, nodeView.history.bestBlockInfo.timestamp, nextConsensusEpochNumber, nextConsensusSlotNumber)
+    checkNextEpochAndSlot(parentBlockInfo.timestamp,nodeView.history.bestBlockInfo.timestamp,
+        nextConsensusEpochNumber, nextConsensusSlotNumber) match {
+      case Some(forgeFailure) => return forgeFailure
+      case _ => // checks passed
+    }
 
     val nextBlockTimestamp = TimeToEpochUtils.getTimeStampForEpochAndSlot(params, nextConsensusEpochNumber, nextConsensusSlotNumber)
     val consensusInfo: FullConsensusEpochInfo = nodeView.history.getFullConsensusEpochInfoForBlock(nextBlockTimestamp, parentBlockId)
@@ -79,11 +83,10 @@ class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
         .map { case (forgingStakeMerklePathInfo, privateKey25519, vrfProof, _) =>
           forgeBlock(nodeView, nextBlockTimestamp, branchPointInfo, forgingStakeMerklePathInfo, privateKey25519, vrfProof)
         }
-        .getOrElse(SkipSlot)
+        .getOrElse(SkipSlot("No eligible forging stake found."))
       forgingResult
     }
-  }
-    match {
+  } match {
       case Success(result) => {
         log.info(s"Forge result is: $result")
         result
@@ -111,7 +114,7 @@ class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
   private def checkNextEpochAndSlot(parentBlockTimestamp: Long,
                                     currentTipBlockTimestamp: Long,
                                     nextEpochNumber: ConsensusEpochNumber,
-                                    nextSlotNumber: ConsensusSlotNumber): Unit = {
+                                    nextSlotNumber: ConsensusSlotNumber): Option[ForgeFailure] = {
     // Parent block and current tip block can be the same in case of extension the Active chain.
     // But can be different in case of sidechain fork caused by mainchain fork.
     // In this case parent block is before the tip, and tip block will be the last Ommer included into the next block.
@@ -119,17 +122,23 @@ class ForgeMessageBuilder(mainchainSynchronizer: MainchainSynchronizer,
     val currentTipBlockEpochAndSlot: ConsensusEpochAndSlot = TimeToEpochUtils.timestampToEpochAndSlot(params, currentTipBlockTimestamp)
     val nextBlockEpochAndSlot: ConsensusEpochAndSlot = ConsensusEpochAndSlot(nextEpochNumber, nextSlotNumber)
 
-    if(parentBlockEpochAndSlot >= nextBlockEpochAndSlot) {
-      throw new IllegalArgumentException (s"Try to forge block with incorrect epochAndSlot $nextBlockEpochAndSlot which are equal or less than parent block epochAndSlot: $parentBlockEpochAndSlot")
+    if(parentBlockEpochAndSlot > nextBlockEpochAndSlot) {
+      return Some(ForgeFailed(new IllegalArgumentException (s"Try to forge block with incorrect epochAndSlot $nextBlockEpochAndSlot which are equal or less than parent block epochAndSlot: $parentBlockEpochAndSlot")))
+    }
+
+    if(parentBlockEpochAndSlot == nextBlockEpochAndSlot) {
+      return Some(SkipSlot(s"Chain tip with $nextBlockEpochAndSlot has been generated already."))
     }
 
     if ((nextEpochNumber - parentBlockEpochAndSlot.epochNumber) > 1) {
-      throw new IllegalArgumentException (s"Forging is not possible, because of whole consensus epoch is missed: current epoch = $nextEpochNumber, parent epoch = ${parentBlockEpochAndSlot.epochNumber}")
+      return Some(ForgeFailed(new IllegalArgumentException (s"Forging is not possible, because of whole consensus epoch is missed: current epoch = $nextEpochNumber, parent epoch = ${parentBlockEpochAndSlot.epochNumber}")))
     }
 
     if(currentTipBlockEpochAndSlot >= nextBlockEpochAndSlot) {
-      throw new IllegalArgumentException (s"Try to forge block with incorrect epochAndSlot $nextBlockEpochAndSlot which are equal or less than last ommer epochAndSlot: $currentTipBlockEpochAndSlot")
+      return Some(ForgeFailed(new IllegalArgumentException (s"Try to forge block with incorrect epochAndSlot $nextBlockEpochAndSlot which are equal or less than last ommer epochAndSlot: $currentTipBlockEpochAndSlot")))
     }
+
+    None
   }
 
   private def getBranchPointInfo(history: SidechainHistory): Try[BranchPointInfo] = Try {

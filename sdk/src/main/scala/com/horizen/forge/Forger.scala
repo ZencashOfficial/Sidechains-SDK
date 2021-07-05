@@ -120,9 +120,9 @@ class Forger(settings: SidechainSettings,
         respondsToOpt.map(respondsTo => respondsTo ! Success(block.id))
       }
 
-      case Success(SkipSlot) => {
-        log.info(s"Slot is skipped")
-        respondsToOpt.map(respondsTo => respondsTo ! Failure(new RuntimeException("Slot had been skipped")))
+      case Success(SkipSlot(reason)) => {
+        log.info(s"Slot is skipped with reason: $reason")
+        respondsToOpt.map(respondsTo => respondsTo ! Failure(new RuntimeException(s"Slot had been skipped with reason: $reason")))
       }
 
       case Success(NoOwnedForgingStake) => {
