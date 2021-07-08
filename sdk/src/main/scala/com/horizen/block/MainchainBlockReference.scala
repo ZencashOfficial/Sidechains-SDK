@@ -134,7 +134,7 @@ case class MainchainBlockReference(
 
 object MainchainBlockReference extends ScorexLogging {
   // TO DO: check size
-  val MAX_MAINCHAIN_BLOCK_SIZE: Int = 2048 * 1024 //2048K
+  val MAX_MAINCHAIN_BLOCK_SIZE: Int = 4000000 // 4Mb since SC fork actvated
   val SC_CERT_BLOCK_VERSION = 3
 
   def create(mainchainBlockBytes: Array[Byte], params: NetworkParams): Try[MainchainBlockReference] = {
